@@ -16,7 +16,7 @@ import {
   AlertCircle,
   UploadCloud,
 } from "lucide-react";
-import ChainlitChatPanel from "./ChainlitChatPanel";
+import ChatPanel from "./ChatPanel";
 import AssignmentPanel from "./AssignmentPanel";
 
 type Tab = "chat" | "upload" | "assignment";
@@ -83,7 +83,6 @@ export default function RagAppShell() {
   const [docs, setDocs] = useState<UploadedDoc[]>(DUMMY_DOCS);
   const [isDragging, setIsDragging] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function navigate(tab: Tab) {
     const href =
@@ -119,8 +118,8 @@ export default function RagAppShell() {
     setTimeout(() => {
       setDocs((prev) =>
         prev.map((d) =>
-          newDocs.some((n) => n.id === d.id) ? { ...d, status: "ready" } : d
-        )
+          newDocs.some((n) => n.id === d.id) ? { ...d, status: "ready" } : d,
+        ),
       );
     }, 1800);
   }
@@ -225,7 +224,7 @@ export default function RagAppShell() {
 
       <main className="flex flex-1 flex-col overflow-hidden pt-14 md:pt-0">
         {activeTab === "chat" && (
-          <ChainlitChatPanel key={chatSessionKey} sessionKey={chatSessionKey} />
+          <ChatPanel key={chatSessionKey} />
         )}
         {activeTab === "upload" && (
           <UploadPanel
@@ -234,7 +233,6 @@ export default function RagAppShell() {
             setIsDragging={setIsDragging}
             onFiles={handleFiles}
             onRemove={removeDoc}
-            fileInputRef={fileInputRef}
           />
         )}
         {activeTab === "assignment" && <AssignmentPanel />}
@@ -275,15 +273,14 @@ function UploadPanel({
   setIsDragging,
   onFiles,
   onRemove,
-  fileInputRef,
 }: {
   docs: UploadedDoc[];
   isDragging: boolean;
   setIsDragging: (v: boolean) => void;
   onFiles: (files: FileList | null) => void;
   onRemove: (id: string) => void;
-  fileInputRef: React.RefObject<HTMLInputElement>;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   return (
     <div className="mx-auto w-full max-w-2xl overflow-y-auto p-4 md:p-8">
       <h1 className="mb-1 text-lg font-medium">Upload documents</h1>

@@ -1,12 +1,11 @@
 "use client";
 
-import ChainlitProvider from "@/components/providers/ChainlitProvider";
-import RagAppShell from "@/components/RagAppShell";
+import dynamic from "next/dynamic";
+
+const RagAppShell = dynamic(() => import("@/components/RagAppShell"), {
+  ssr: false,
+});
 
 export default function RagAppLayout() {
-  return (
-    <ChainlitProvider>
-      <RagAppShell />
-    </ChainlitProvider>
-  );
+  return <RagAppShell />;
 }

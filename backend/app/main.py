@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.chat.routes import router as chat_router
 from app.home.routes import router as home_router
 
 app = FastAPI()
 
-# Allow all origins for development; restrict in production
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,3 +14,4 @@ app.add_middleware(
 )
 
 app.include_router(home_router)
+app.include_router(chat_router)

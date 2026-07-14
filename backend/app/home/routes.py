@@ -115,6 +115,7 @@ async def health():
         "endpoints": {
             "health": "/",
             "assignment": "/assignment",
+            "chat": "/chat",
         },
     }
 

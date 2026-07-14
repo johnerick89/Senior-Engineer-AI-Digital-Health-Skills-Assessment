@@ -1,34 +1,75 @@
 services:
   backend:
-      build:
-        context: ./backend
-        dockerfile: Dockerfile
-      restart: always
-      ports:
-        - "6100:6100"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "6100:6100"
+    volumes:
+      - ./backend:/usr/src/LMH
+    environment:
+      - PORT=6100
+      - WATCHFILES_FORCE_POLLING=true
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "6100",
+        "--reload",
+      ]
 
   frontend:
-      build:
-        context: ./frontend
-        dockerfile: Dockerfile
-      command: npm start
-      restart: always
-      environment:
-        - BACKEND_URL=http://backend:6100
-      ports:
-        - "3000:3000"
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:6100
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+    command: ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", "3000"]
+    depends_on:
+      - backend
 
   chainlit:
-      build:
-        context: ./chainlit_app
-        dockerfile: Dockerfile
-      restart: always
-      ports:
-        - "8000:8000"
-  
+    build:
+      context: ./chainlit_app
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chainlit_app:/chainlit_app
+    environment:
+      - WATCHFILES_FORCE_POLLING=true
+    command:
+      [
+        "python",
+        "-m",
+        "chainlit",
+        "run",
+        "main.py",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "-w",
+      ]
+
   relational_db:
     image: pgvector/pgvector:pg16
-    restart: always
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -40,3 +81,4 @@ services:
 
 volumes:
   db_volume:
+  frontend_node_modules:

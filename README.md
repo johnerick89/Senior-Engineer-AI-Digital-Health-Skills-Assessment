@@ -14,6 +14,11 @@ This repository contains the starter code for your submission. Please read every
   ```sh
    docker compose -p assessment up -d --build
   ```
+
+   Local `docker-compose.yaml` mounts your source into the containers and runs
+   the apps in watch mode (`uvicorn --reload`, `next dev`, Chainlit `-w`), so
+   edits on the host should hot-reload without rebuilding. Rebuild only when
+   dependencies or Dockerfiles change.
 2. **Access the application:**
 
   | Service                     | URL                                            |
