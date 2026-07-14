@@ -15,12 +15,6 @@ import {
 } from "@/context/ChatSessionContext";
 import { mobileTitleForPath, NAV_ITEMS, type AppRoute } from "@/config/navigation";
 
-const DUMMY_THREADS = [
-  { id: "t1", title: "Community health worker training docs" },
-  { id: "t2", title: "Malaria protocol Q&A" },
-  { id: "t3", title: "Supply chain SOPs" },
-];
-
 const NAV_ICONS = {
   "/": MessageCircle,
   "/upload": UploadIcon,
@@ -37,20 +31,24 @@ export default function RagAppShell({ children }: { children: ReactNode }) {
 
 function ShellLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { startNewChat } = useChatSession();
-  const [activeThreadId, setActiveThreadId] = useState("");
+  const {
+    activeThreadId,
+    threads,
+    threadsLoading,
+    startNewChat,
+    selectThread,
+  } = useChatSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const pathname = router.pathname as AppRoute;
 
   function handleNewChat() {
-    setActiveThreadId("");
     startNewChat();
     void router.push("/");
     setSidebarOpen(false);
   }
 
   function handleSelectThread(id: string) {
-    setActiveThreadId(id);
+    selectThread(id);
     void router.push("/");
     setSidebarOpen(false);
   }
@@ -131,7 +129,13 @@ function ShellLayout({ children }: { children: ReactNode }) {
           History
         </p>
         <div className="flex flex-1 flex-col gap-1 overflow-y-auto">
-          {DUMMY_THREADS.map((thread) => (
+          {threadsLoading && threads.length === 0 && (
+            <p className="px-3 py-2 text-sm text-slate-400">Loading…</p>
+          )}
+          {!threadsLoading && threads.length === 0 && (
+            <p className="px-3 py-2 text-sm text-slate-400">No chats yet</p>
+          )}
+          {threads.map((thread) => (
             <button
               key={thread.id}
               onClick={() => handleSelectThread(thread.id)}
@@ -141,7 +145,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
                   : "text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {thread.title}
+              {thread.title?.trim() || "Untitled chat"}
             </button>
           ))}
         </div>

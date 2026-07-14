@@ -12,3 +12,10 @@ export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
 };
+
+export type ChatThreadSummary = {
+  id: string;
+  title: string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
+};

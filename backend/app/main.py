@@ -31,6 +31,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Chat-Id", "X-Chat-Title"],
 )
 
 app.include_router(home_router)
