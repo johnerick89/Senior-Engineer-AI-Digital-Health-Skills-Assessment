@@ -2,11 +2,11 @@
 
 import os
 
-import psycopg
 import pytest
+from sqlalchemy import text
 
 from rag_core.core.config import Settings
-from rag_core.db.connection import check_connection, connect
+from rag_core.db.session import check_connection, get_engine
 
 _SETTINGS_ENV_VARS = (
     "DATABASE_URL",
@@ -47,11 +47,12 @@ def _postgres_has_pgvector(settings: Settings) -> bool:
         return False
 
     try:
-        with connect(settings=settings) as conn:
-            conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-            conn.commit()
+        engine = get_engine(settings=settings)
+        with engine.begin() as conn:
+            # Extension bootstrap only — not an application data path.
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         return True
-    except psycopg.Error:
+    except Exception:
         return False
 
 

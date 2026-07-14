@@ -41,31 +41,47 @@ def test_estimate_embedding_ignores_completion_tokens() -> None:
 
 
 def test_unknown_chat_model_falls_back_to_gpt_4o_mini_rates(
-    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    with caplog.at_level("WARNING"):
-        cost = estimate_step_cost_usd(
-            model="definitely-not-a-real-model",
-            prompt_tokens=1_000_000,
-            completion_tokens=1_000_000,
-            is_embedding=False,
-        )
+    warnings: list[str] = []
+
+    def capture_warning(msg: str, *args: object) -> None:
+        warnings.append(msg % args if args else msg)
+
+    monkeypatch.setattr(
+        "rag_core.core.token_pricing.logger.warning",
+        capture_warning,
+    )
+    cost = estimate_step_cost_usd(
+        model="definitely-not-a-real-model",
+        prompt_tokens=1_000_000,
+        completion_tokens=1_000_000,
+        is_embedding=False,
+    )
     assert cost == pytest.approx(0.75)
-    assert "Unknown chat model" in caplog.text
+    assert any("Unknown chat model" in w for w in warnings)
 
 
 def test_unknown_embed_model_falls_back_to_small_rates(
-    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    with caplog.at_level("WARNING"):
-        cost = estimate_step_cost_usd(
-            model="mystery-embed",
-            prompt_tokens=1_000_000,
-            completion_tokens=0,
-            is_embedding=True,
-        )
+    warnings: list[str] = []
+
+    def capture_warning(msg: str, *args: object) -> None:
+        warnings.append(msg % args if args else msg)
+
+    monkeypatch.setattr(
+        "rag_core.core.token_pricing.logger.warning",
+        capture_warning,
+    )
+    cost = estimate_step_cost_usd(
+        model="mystery-embed",
+        prompt_tokens=1_000_000,
+        completion_tokens=0,
+        is_embedding=True,
+    )
     assert cost == pytest.approx(0.02)
-    assert "Unknown embedding model" in caplog.text
+    assert any("Unknown embedding model" in w for w in warnings)
 
 
 def test_estimate_cost_usd_for_rows_sums_steps() -> None:

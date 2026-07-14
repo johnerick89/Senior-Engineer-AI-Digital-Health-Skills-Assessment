@@ -1,12 +1,13 @@
-"""pgvector store initialization and health checks."""
+"""pgvector store initialization and health checks.
 
-from psycopg import Connection
+Schema creation is owned by Alembic (`rag_core.db.migrate.run_migrations`).
+"""
+
+from sqlalchemy import inspect
 
 from rag_core.core.config import Settings, get_settings
-from rag_core.db.connection import check_connection, connect
-from rag_core.db.schema import apply_schema
-from rag_core.embeddings import EMBEDDING_DIMENSION
-from pgvector.psycopg import register_vector
+from rag_core.db.migrate import run_migrations
+from rag_core.db.session import check_connection, configure_engine, get_engine
 
 
 def initialize_vector_store(
@@ -15,15 +16,13 @@ def initialize_vector_store(
     settings: Settings | None = None,
     embedding_dimension: int | None = None,
 ) -> None:
-    """Create pgvector extension and core tables if they do not exist."""
+    """Run Alembic migrations and refresh the SQLAlchemy engine."""
+    _ = embedding_dimension  # dimension is pinned in models / migration
     resolved_settings = settings or get_settings()
-    dimension = embedding_dimension or EMBEDDING_DIMENSION
     url = database_url or resolved_settings.database_url
 
-    with connect(url, settings=resolved_settings) as conn:
-        apply_schema(conn, dimension)
-        register_vector(conn)
-        conn.commit()
+    run_migrations(url, settings=resolved_settings)
+    configure_engine(url, settings=resolved_settings)
 
 
 def vector_store_is_ready(
@@ -38,22 +37,10 @@ def vector_store_is_ready(
     if not check_connection(url, settings=resolved_settings):
         return False
 
-    required_tables = ("documents", "document_chunks", "chat_threads", "chat_messages")
-    query = """
-        SELECT table_name
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND table_name = ANY(%s)
-    """
-
+    required_tables = {"documents", "document_chunks", "chat_threads", "chat_messages"}
     try:
-        with connect(url, settings=resolved_settings) as conn:
-            rows = conn.execute(query, (list(required_tables),)).fetchall()
-        return {row[0] for row in rows} == set(required_tables)
+        engine = get_engine(url, settings=resolved_settings)
+        existing = set(inspect(engine).get_table_names())
+        return required_tables.issubset(existing)
     except Exception:
         return False
-
-
-def register_vector_adapter(conn: Connection) -> None:
-    """Register pgvector type adapters on a psycopg connection."""
-    register_vector(conn)

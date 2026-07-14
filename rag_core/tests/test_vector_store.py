@@ -8,17 +8,13 @@ from rag_core.core.config import Settings
 from rag_core.vector_store import initialize_vector_store, vector_store_is_ready
 
 
-@patch("rag_core.vector_store.connect")
-@patch("rag_core.vector_store.register_vector")
-@patch("rag_core.vector_store.apply_schema")
-def test_initialize_vector_store_applies_schema_and_commits(
-    mock_apply_schema: MagicMock,
-    mock_register_vector: MagicMock,
-    mock_connect: MagicMock,
+@patch("rag_core.vector_store.configure_engine")
+@patch("rag_core.vector_store.run_migrations")
+def test_initialize_vector_store_runs_migrations_and_configures_engine(
+    mock_run_migrations: MagicMock,
+    mock_configure_engine: MagicMock,
     isolated_settings_env: None,
 ) -> None:
-    conn = MagicMock()
-    mock_connect.return_value.__enter__.return_value = conn
     settings = Settings(
         _env_file=None,
         database_url="postgresql://settings:5432/rag",
@@ -26,10 +22,14 @@ def test_initialize_vector_store_applies_schema_and_commits(
 
     initialize_vector_store(settings=settings)
 
-    mock_connect.assert_called_once_with("postgresql://settings:5432/rag", settings=settings)
-    mock_apply_schema.assert_called_once_with(conn, 1536)
-    mock_register_vector.assert_called_once_with(conn)
-    conn.commit.assert_called_once()
+    mock_run_migrations.assert_called_once_with(
+        "postgresql://settings:5432/rag",
+        settings=settings,
+    )
+    mock_configure_engine.assert_called_once_with(
+        "postgresql://settings:5432/rag",
+        settings=settings,
+    )
 
 
 @patch("rag_core.vector_store.check_connection", return_value=False)
@@ -43,23 +43,24 @@ def test_vector_store_is_ready_false_when_db_unreachable(
 
 
 @patch("rag_core.vector_store.check_connection", return_value=True)
-@patch("rag_core.vector_store.connect")
+@patch("rag_core.vector_store.inspect")
+@patch("rag_core.vector_store.get_engine")
 def test_vector_store_is_ready_true_when_all_tables_exist(
-    mock_connect: MagicMock,
+    mock_get_engine: MagicMock,
+    mock_inspect: MagicMock,
     _mock_check: MagicMock,
     isolated_settings_env: None,
 ) -> None:
-    conn = MagicMock()
-    conn.execute.return_value.fetchall.return_value = [
-        ("documents",),
-        ("document_chunks",),
-        ("chat_threads",),
-        ("chat_messages",),
+    mock_inspect.return_value.get_table_names.return_value = [
+        "documents",
+        "document_chunks",
+        "chat_threads",
+        "chat_messages",
     ]
-    mock_connect.return_value.__enter__.return_value = conn
     settings = Settings(_env_file=None, database_url="postgresql://settings:5432/rag")
 
     assert vector_store_is_ready(settings=settings) is True
+    mock_get_engine.assert_called_once()
 
 
 @pytest.mark.integration

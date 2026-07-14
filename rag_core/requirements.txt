@@ -4,6 +4,8 @@ openai==1.58.1
 anthropic==0.42.0
 psycopg[binary]==3.2.3
 pgvector==0.3.6
+sqlalchemy==2.0.51
+alembic==1.18.5
 pydantic==2.10.4
 pydantic-settings==2.7.0
 numpy==2.2.1
