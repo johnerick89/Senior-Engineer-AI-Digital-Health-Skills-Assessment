@@ -68,6 +68,22 @@ services:
         "-w",
       ]
 
+  rag_core:
+    build:
+      context: ./rag_core
+      dockerfile: Dockerfile
+    volumes:
+      - ./rag_core:/rag_core
+    env_file:
+      - ./rag_core/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@relational_db:5432/postgres
+      - TEST_DATABASE_URL=postgresql://postgres:postgres@relational_db:5432/postgres
+    depends_on:
+      - relational_db
+    profiles:
+      - tools
+
   relational_db:
     image: pgvector/pgvector:pg16
     restart: unless-stopped

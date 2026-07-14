@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rag_core"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pypdf==5.1.0",
+    "tiktoken==0.8.0",
+    "openai==1.58.1",
+    "anthropic==0.42.0",
+    "psycopg[binary]==3.2.3",
+    "pgvector==0.3.6",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.0",
+    "numpy==2.2.1",
+    "structlog==26.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rag_core*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: tests that require a running PostgreSQL + pgvector instance",
+]
