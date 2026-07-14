@@ -6,6 +6,7 @@ import {
   clientConfig,
 } from "@/config/client";
 import { useChatSession } from "@/context/ChatSessionContext";
+import MarkdownMessage from "@/components/MarkdownMessage";
 
 function buildHistory(messages: ChatMessage[]): ChatTurn[] {
   const history: ChatTurn[] = [];
@@ -230,10 +231,14 @@ export default function ChatPanel() {
                   className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm leading-relaxed md:max-w-[70%] ${
                     isUser
                       ? "bg-teal-600 text-white"
-                      : "border border-slate-200 bg-white text-slate-800"
+                      : "border border-slate-200 bg-white text-slate-800 shadow-sm"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  {isUser ? (
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  ) : (
+                    <MarkdownMessage content={message.content} />
+                  )}
                 </div>
               </div>
             );
