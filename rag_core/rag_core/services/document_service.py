@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Sequence
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from rag_core.rag.embeddings import EMBEDDING_DIMENSION
@@ -82,3 +83,22 @@ def update_document_status(
 def get_document(db: Session, document_id: uuid.UUID) -> Document | None:
     """Return a document by id, or None."""
     return db.get(Document, document_id)
+
+
+def list_ready_document_filenames(
+    db: Session,
+    *,
+    limit: int = 10,
+) -> list[str]:
+    """Return up to ``limit`` filenames for documents with status ready."""
+    if limit <= 0:
+        return []
+
+    stmt = (
+        select(Document.filename)
+        .where(Document.status == DocumentStatus.READY.value)
+        .distinct()
+        .order_by(Document.filename)
+        .limit(limit)
+    )
+    return list(db.scalars(stmt).all())

@@ -12,3 +12,4 @@ A note on tooling: I used AI coding assistants (Cursor) during development, cons
 ## Starter app changes
 
 1. Move the assessment link from the root url to its own assignemnt endpoint so that the root (/) can be for health endpoint
+2. Move the assessment frontend url from the home url to its own assignemnt url so that the home (/) can be for new chat
