@@ -13,6 +13,8 @@ type ChatSessionContextValue = {
   activeThreadId: string;
   threads: ChatThreadSummary[];
   threadsLoading: boolean;
+  suggestedTopics: string[];
+  topicsLoading: boolean;
   startNewChat: () => void;
   selectThread: (id: string) => void;
   upsertThread: (thread: ChatThreadSummary) => void;
@@ -26,6 +28,8 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const [activeThreadId, setActiveThreadId] = useState("");
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
+  const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
+  const [topicsLoading, setTopicsLoading] = useState(true);
 
   const refreshThreads = useCallback(async () => {
     try {
@@ -43,6 +47,33 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refreshThreads();
   }, [refreshThreads]);
+
+  // Fetch once on app load; refresh only when the page is reloaded.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTopics() {
+      setTopicsLoading(true);
+      try {
+        const response = await fetch(
+          `${clientConfig.backendUrl}/chat/suggestions`
+        );
+        if (!response.ok) return;
+        const data = (await response.json()) as { topics?: string[] };
+        if (cancelled) return;
+        setSuggestedTopics((data.topics ?? []).slice(0, 5));
+      } catch {
+        if (!cancelled) setSuggestedTopics([]);
+      } finally {
+        if (!cancelled) setTopicsLoading(false);
+      }
+    }
+
+    void loadTopics();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const startNewChat = useCallback(() => {
     setActiveThreadId("");
@@ -69,6 +100,8 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
         activeThreadId,
         threads,
         threadsLoading,
+        suggestedTopics,
+        topicsLoading,
         startNewChat,
         selectThread,
         upsertThread,

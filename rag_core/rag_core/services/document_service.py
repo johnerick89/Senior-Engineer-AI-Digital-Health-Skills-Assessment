@@ -102,3 +102,57 @@ def list_ready_document_filenames(
         .limit(limit)
     )
     return list(db.scalars(stmt).all())
+
+
+@dataclass(frozen=True)
+class DocumentSnippet:
+    """A short content sample from a ready document."""
+
+    filename: str
+    content: str
+    page_number: int | None
+
+
+def sample_ready_document_snippets(
+    db: Session,
+    *,
+    limit: int = 8,
+    max_chars: int = 400,
+) -> list[DocumentSnippet]:
+    """Return one early chunk per ready document (up to ``limit`` docs)."""
+    if limit <= 0:
+        return []
+
+    docs_stmt = (
+        select(Document)
+        .where(Document.status == DocumentStatus.READY.value)
+        .order_by(Document.updated_at.desc())
+        .limit(limit)
+    )
+    documents = list(db.scalars(docs_stmt).all())
+    snippets: list[DocumentSnippet] = []
+
+    for document in documents:
+        chunk_stmt = (
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == document.id)
+            .where(DocumentChunk.content.is_not(None))
+            .order_by(DocumentChunk.chunk_index.asc())
+            .limit(1)
+        )
+        chunk = db.scalars(chunk_stmt).first()
+        if chunk is None:
+            continue
+        text = " ".join(chunk.content.split()).strip()
+        if not text:
+            continue
+        if len(text) > max_chars:
+            text = text[: max_chars - 1].rstrip() + "…"
+        snippets.append(
+            DocumentSnippet(
+                filename=document.filename,
+                content=text,
+                page_number=chunk.page_number,
+            )
+        )
+    return snippets

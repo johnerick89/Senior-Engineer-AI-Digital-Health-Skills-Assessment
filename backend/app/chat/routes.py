@@ -12,10 +12,16 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.chat.schemas import ChatMessageOut, ChatRequest, ChatThreadSummary
+from app.chat.schemas import (
+    ChatMessageOut,
+    ChatRequest,
+    ChatSuggestionsResponse,
+    ChatThreadSummary,
+)
 from rag_core.db.session import get_session
 from rag_core.rag.generation import stream_rag_answer
 from rag_core.rag.schemas import ChatQuery, ChatTurn as RagChatTurn
+from rag_core.rag.suggestions import suggest_chat_topics
 from rag_core.services import chat_service
 
 router = APIRouter()
@@ -79,6 +85,13 @@ def _save_assistant_message(thread_id: uuid.UUID, content: str) -> None:
         )
         _touch_thread(thread)
         db.commit()
+
+
+@router.get("/chat/suggestions", response_model=ChatSuggestionsResponse)
+async def chat_suggestions() -> ChatSuggestionsResponse:
+    """Return up to five document-grounded starter topics for a new chat."""
+    topics = await suggest_chat_topics()
+    return ChatSuggestionsResponse(topics=topics)
 
 
 @router.get("/chats", response_model=list[ChatThreadSummary])

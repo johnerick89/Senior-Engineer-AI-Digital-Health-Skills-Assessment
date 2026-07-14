@@ -110,3 +110,19 @@ def test_list_chats(
     assert len(payload) == 1
     assert payload[0]["title"] == "Saved chat"
     assert payload[0]["id"] == str(thread.id)
+
+
+@patch(
+    "app.chat.routes.suggest_chat_topics",
+    new_callable=AsyncMock,
+    return_value=["What is ACT for malaria?", "Summarize CHW duties."],
+)
+def test_chat_suggestions(
+    _mock_topics: AsyncMock,
+    client: TestClient,
+) -> None:
+    response = client.get("/chat/suggestions")
+    assert response.status_code == 200
+    assert response.json() == {
+        "topics": ["What is ACT for malaria?", "Summarize CHW duties."],
+    }

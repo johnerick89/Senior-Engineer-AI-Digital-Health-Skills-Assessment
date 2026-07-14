@@ -49,3 +49,7 @@ class ChatMessageOut(BaseModel):
     role: Literal["user", "assistant"]
     content: str
     created_at: datetime | None = None
+
+
+class ChatSuggestionsResponse(BaseModel):
+    topics: list[str] = Field(default_factory=list, max_length=5)

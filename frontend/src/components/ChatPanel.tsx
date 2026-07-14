@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageCircle, Send } from "lucide-react";
 import {
   ChatMessage,
@@ -28,15 +28,30 @@ function buildHistory(messages: ChatMessage[]): ChatTurn[] {
 }
 
 export default function ChatPanel() {
-  const { activeThreadId, upsertThread, refreshThreads } = useChatSession();
+  const {
+    activeThreadId,
+    suggestedTopics,
+    topicsLoading,
+    upsertThread,
+    refreshThreads,
+  } = useChatSession();
   const [threadId, setThreadId] = useState(activeThreadId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingThread, setIsLoadingThread] = useState(Boolean(activeThreadId));
   const [error, setError] = useState<string | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const skipLoadRef = useRef(false);
+
+  // Show on a new chat that has not sent any message yet.
+  const showTopicSuggestions =
+    !activeThreadId &&
+    !threadId &&
+    !isLoadingThread &&
+    messages.length === 0 &&
+    !isStreaming;
 
   useEffect(() => {
     setThreadId(activeThreadId);
@@ -49,6 +64,7 @@ export default function ChatPanel() {
       if (!activeThreadId) {
         setMessages([]);
         setIsLoadingThread(false);
+        setSelectedTopic(null);
         return;
       }
 
@@ -100,86 +116,110 @@ export default function ChatPanel() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function handleSend() {
-    const text = draft.trim();
-    if (!text || isStreaming || isLoadingThread) return;
+  const sendMessage = useCallback(
+    async (rawText: string) => {
+      const text = rawText.trim();
+      if (!text || isStreaming || isLoadingThread) return;
 
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: text,
-    };
-    const assistantId = `assistant-${Date.now()}`;
-    const history = buildHistory(messages);
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: text,
+      };
+      const assistantId = `assistant-${Date.now()}`;
+      const history = buildHistory(messages);
 
-    setMessages((prev) => [
-      ...prev,
-      userMessage,
-      { id: assistantId, role: "assistant", content: "" },
-    ]);
-    setDraft("");
-    setError(null);
-    setIsStreaming(true);
+      setMessages((prev) => [
+        ...prev,
+        userMessage,
+        { id: assistantId, role: "assistant", content: "" },
+      ]);
+      setDraft("");
+      setError(null);
+      setIsStreaming(true);
 
-    try {
-      const response = await fetch(`${clientConfig.backendUrl}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          input: text,
-          history,
-          id: threadId || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Chat request failed (${response.status})`);
-      }
-
-      const responseThreadId = response.headers.get("X-Chat-Id");
-      const rawTitle = response.headers.get("X-Chat-Title");
-      const responseTitle = rawTitle ? decodeURIComponent(rawTitle) : null;
-      if (responseThreadId) {
-        if (!threadId) {
-          skipLoadRef.current = true;
-        }
-        setThreadId(responseThreadId);
-        upsertThread({
-          id: responseThreadId,
-          title: responseTitle || text,
+      try {
+        const response = await fetch(`${clientConfig.backendUrl}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input: text,
+            history,
+            id: threadId || undefined,
+          }),
         });
-      }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No response stream available");
-      }
+        if (!response.ok) {
+          throw new Error(`Chat request failed (${response.status})`);
+        }
 
-      const decoder = new TextDecoder();
-      let streamed = "";
+        const responseThreadId = response.headers.get("X-Chat-Id");
+        const rawTitle = response.headers.get("X-Chat-Title");
+        const responseTitle = rawTitle ? decodeURIComponent(rawTitle) : null;
+        if (responseThreadId) {
+          if (!threadId) {
+            skipLoadRef.current = true;
+          }
+          setThreadId(responseThreadId);
+          upsertThread({
+            id: responseThreadId,
+            title: responseTitle || text,
+          });
+        }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("No response stream available");
+        }
 
-        streamed += decoder.decode(value, { stream: true });
-        const nextContent = streamed;
+        const decoder = new TextDecoder();
+        let streamed = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          streamed += decoder.decode(value, { stream: true });
+          const nextContent = streamed;
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? { ...message, content: nextContent }
+                : message
+            )
+          );
+        }
+
+        await refreshThreads();
+      } catch {
+        setError("Failed to get a response from the chat service.");
         setMessages((prev) =>
-          prev.map((message) =>
-            message.id === assistantId
-              ? { ...message, content: nextContent }
-              : message
-          )
+          prev.filter((message) => message.id !== assistantId)
         );
+        setSelectedTopic(null);
+      } finally {
+        setIsStreaming(false);
       }
+    },
+    [
+      isStreaming,
+      isLoadingThread,
+      messages,
+      threadId,
+      upsertThread,
+      refreshThreads,
+    ]
+  );
 
-      await refreshThreads();
-    } catch {
-      setError("Failed to get a response from the chat service.");
-      setMessages((prev) => prev.filter((message) => message.id !== assistantId));
-    } finally {
-      setIsStreaming(false);
-    }
+  function handleSend() {
+    void sendMessage(draft);
+  }
+
+  function handleTopicClick(topic: string) {
+    if (isStreaming || selectedTopic) return;
+    setSelectedTopic(topic);
+    setDraft(topic);
+    void sendMessage(topic);
   }
 
   return (
@@ -198,11 +238,50 @@ export default function ChatPanel() {
         )}
 
         {!isLoadingThread && messages.length === 0 && !error && (
-          <div className="flex h-full flex-col items-center justify-center text-center text-slate-400">
+          <div className="flex h-full flex-col items-center justify-center px-2 text-center text-slate-400">
             <MessageCircle className="mb-3 h-8 w-8" />
             <p className="text-sm">
               Ask a question about your uploaded documents to get started.
             </p>
+
+            {showTopicSuggestions && (
+              <div className="mt-6 w-full max-w-2xl">
+                {topicsLoading && (
+                  <p className="text-xs text-slate-400">Finding topic ideas…</p>
+                )}
+                {!topicsLoading && suggestedTopics.length > 0 && (
+                  <>
+                    <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-400">
+                      Suggested topics
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {suggestedTopics.map((topic) => {
+                        const isSelected = selectedTopic === topic;
+                        const disabled = Boolean(selectedTopic) || isStreaming;
+                        return (
+                          <button
+                            key={topic}
+                            type="button"
+                            onClick={() => handleTopicClick(topic)}
+                            disabled={disabled}
+                            aria-pressed={isSelected}
+                            className={`max-w-full rounded-full border px-3.5 py-2 text-left text-sm transition ${
+                              isSelected
+                                ? "border-teal-600 bg-teal-600 text-white"
+                                : disabled
+                                  ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
+                                  : "border-teal-200 bg-white text-teal-800 hover:border-teal-500 hover:bg-teal-50"
+                            }`}
+                          >
+                            <span className="line-clamp-2">{topic}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
