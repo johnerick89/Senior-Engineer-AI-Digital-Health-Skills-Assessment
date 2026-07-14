@@ -49,3 +49,4 @@ next-env.d.ts
 backend/.venv
 chainlit_app/.venv
 .venv/
+__pycache__/
