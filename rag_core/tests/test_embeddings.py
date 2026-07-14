@@ -37,6 +37,7 @@ def test_embed_texts_batches_and_returns_vectors(
     mock_get_settings.return_value = MagicMock(ingestion_batch_size=2)
     response = MagicMock()
     response.data = [_fake_embedding(1), _fake_embedding(0)]
+    response.usage = MagicMock(prompt_tokens=4, total_tokens=4, completion_tokens=0)
     mock_create.return_value = response
 
     vectors = embed_texts(["a", "b"])
@@ -57,6 +58,7 @@ def test_embed_texts_rejects_wrong_dimension(
     mock_get_settings.return_value = MagicMock(ingestion_batch_size=100)
     response = MagicMock()
     response.data = [_fake_embedding(0, dim=8)]
+    response.usage = MagicMock(prompt_tokens=1, total_tokens=1, completion_tokens=0)
     mock_create.return_value = response
 
     with pytest.raises(ValueError, match="Expected embedding dimension"):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -10,14 +11,19 @@ from pydantic import BaseModel, Field
 from rag_core.core.logging import get_logger
 from rag_core.db.session import get_session
 from rag_core.models.document import DocumentStatus
+from rag_core.models.usage_event import UsageKind
 from rag_core.rag.chunking import chunk_pages
-from rag_core.rag.embeddings import embed_texts
+from rag_core.rag.embeddings import EMBEDDING_MODEL, embed_texts_with_usage
 from rag_core.rag.pdf import PdfExtractionError, extract_pdf_pages
 from rag_core.services.document_service import (
     ChunkInsert,
     create_document,
     insert_chunks,
     update_document_status,
+)
+from rag_core.services.usage_service import (
+    apportion_integers,
+    record_usage_event,
 )
 
 logger = get_logger(__name__)
@@ -67,11 +73,21 @@ def ingest_pdf(
         if not chunks:
             raise PdfExtractionError("No text chunks produced from PDF")
 
-        embeddings = embed_texts([chunk.content for chunk in chunks])
+        texts = [chunk.content for chunk in chunks]
+        embed_result = embed_texts_with_usage(texts)
+        embeddings = embed_result.embeddings
         if len(embeddings) != len(chunks):
             raise RuntimeError(
                 f"Embedding count mismatch: {len(embeddings)} vectors for {len(chunks)} chunks"
             )
+
+        weights = [max(1, len(t)) for t in texts]
+        token_parts = apportion_integers(embed_result.usage.prompt_tokens, weights)
+        total_cost = embed_result.usage.estimated_cost_usd
+        cost_parts = apportion_integers(
+            int(total_cost * Decimal("100000000")),  # 1e-8 USD units
+            weights,
+        )
 
         inserts = [
             ChunkInsert(
@@ -79,6 +95,9 @@ def ingest_pdf(
                 content=chunk.content,
                 page_number=chunk.page_number,
                 embedding=embeddings[i],
+                prompt_tokens=token_parts[i],
+                estimated_cost_usd=Decimal(cost_parts[i]) / Decimal("100000000"),
+                model=EMBEDDING_MODEL,
             )
             for i, chunk in enumerate(chunks)
         ]
@@ -86,12 +105,20 @@ def ingest_pdf(
         with get_session() as db:
             insert_chunks(db, document_id, inserts)
             update_document_status(db, document_id, DocumentStatus.READY.value)
+            record_usage_event(
+                db,
+                kind=UsageKind.INGEST_EMBEDDING,
+                usage=embed_result.usage,
+                document_id=document_id,
+            )
             db.commit()
 
         logger.info(
             "ingest_complete",
             document_id=str(document_id),
             chunk_count=len(inserts),
+            embed_tokens=embed_result.usage.prompt_tokens,
+            embed_cost_usd=float(embed_result.usage.estimated_cost_usd),
         )
         return IngestResult(
             document_id=document_id,

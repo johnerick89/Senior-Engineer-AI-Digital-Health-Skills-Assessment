@@ -8,6 +8,11 @@ import {
 import { useChatSession } from "@/context/ChatSessionContext";
 import MarkdownMessage from "@/components/MarkdownMessage";
 
+type ThreadUsage = {
+  total_tokens: number;
+  estimated_cost_usd: number;
+};
+
 function buildHistory(messages: ChatMessage[]): ChatTurn[] {
   const history: ChatTurn[] = [];
 
@@ -27,6 +32,22 @@ function buildHistory(messages: ChatMessage[]): ChatTurn[] {
   return history;
 }
 
+function formatUsd(amount: number): string {
+  if (amount <= 0) return "$0.00";
+  if (amount < 0.01) return `$${amount.toFixed(6)}`;
+  return `$${amount.toFixed(4)}`;
+}
+
+async function fetchThreadUsage(id: string): Promise<ThreadUsage | null> {
+  try {
+    const response = await fetch(`${clientConfig.backendUrl}/chats/${id}/usage`);
+    if (!response.ok) return null;
+    return (await response.json()) as ThreadUsage;
+  } catch {
+    return null;
+  }
+}
+
 export default function ChatPanel() {
   const {
     activeThreadId,
@@ -42,6 +63,7 @@ export default function ChatPanel() {
   const [isLoadingThread, setIsLoadingThread] = useState(Boolean(activeThreadId));
   const [error, setError] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [usage, setUsage] = useState<ThreadUsage | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const skipLoadRef = useRef(false);
 
@@ -65,12 +87,16 @@ export default function ChatPanel() {
         setMessages([]);
         setIsLoadingThread(false);
         setSelectedTopic(null);
+        setUsage(null);
         return;
       }
 
       if (skipLoadRef.current) {
         skipLoadRef.current = false;
         setIsLoadingThread(false);
+        void fetchThreadUsage(activeThreadId).then((next) => {
+          if (!cancelled) setUsage(next);
+        });
         return;
       }
 
@@ -96,10 +122,13 @@ export default function ChatPanel() {
             content: message.content,
           }))
         );
+        const nextUsage = await fetchThreadUsage(activeThreadId);
+        if (!cancelled) setUsage(nextUsage);
       } catch {
         if (!cancelled) {
           setError("Failed to load this chat.");
           setMessages([]);
+          setUsage(null);
         }
       } finally {
         if (!cancelled) setIsLoadingThread(false);
@@ -191,6 +220,11 @@ export default function ChatPanel() {
         }
 
         await refreshThreads();
+        const usageId = responseThreadId || threadId;
+        if (usageId) {
+          const nextUsage = await fetchThreadUsage(usageId);
+          setUsage(nextUsage);
+        }
       } catch {
         setError("Failed to get a response from the chat service.");
         setMessages((prev) =>
@@ -324,6 +358,13 @@ export default function ChatPanel() {
           })}
         <div ref={bottomRef} />
       </div>
+
+      {usage && usage.total_tokens > 0 && (
+        <div className="border-t border-slate-100 px-4 py-2 text-center text-[11px] text-slate-400 md:px-6">
+          Total tokens: {usage.total_tokens.toLocaleString()} · Total cost:{" "}
+          {formatUsd(usage.estimated_cost_usd)}
+        </div>
+      )}
 
       <div className="border-t border-slate-200 bg-white p-3 md:p-4">
         <div className="mx-auto flex max-w-3xl items-center gap-2">

@@ -1,4 +1,4 @@
-export type AppRoute = "/" | "/upload" | "/assignment";
+export type AppRoute = "/" | "/upload" | "/assignment" | "/usage";
 
 export type NavItem = {
   href: AppRoute;
@@ -9,6 +9,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Chat", mobileTitle: "Chat" },
   { href: "/upload", label: "Upload documents", mobileTitle: "Upload" },
+  { href: "/usage", label: "Usage", mobileTitle: "Usage" },
   { href: "/assignment", label: "Assignment brief", mobileTitle: "Assignment" },
 ];
 

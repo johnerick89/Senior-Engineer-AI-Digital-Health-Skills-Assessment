@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Integer, Numeric, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from rag_core.rag.embeddings import EMBEDDING_DIMENSION
+from rag_core.core.embedding_defaults import EMBEDDING_DIMENSION
 from rag_core.models.base import BaseModel
 
 if TYPE_CHECKING:
@@ -36,5 +37,11 @@ class DocumentChunk(BaseModel):
         Vector(EMBEDDING_DIMENSION),
         nullable=True,
     )
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_cost_usd: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 8),
+        nullable=True,
+    )
+    model: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     document: Mapped[Document] = relationship("Document", back_populates="chunks")

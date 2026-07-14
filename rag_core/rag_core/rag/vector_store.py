@@ -37,7 +37,13 @@ def vector_store_is_ready(
     if not check_connection(url, settings=resolved_settings):
         return False
 
-    required_tables = {"documents", "document_chunks", "chat_threads", "chat_messages"}
+    required_tables = {
+        "documents",
+        "document_chunks",
+        "chat_threads",
+        "chat_messages",
+        "usage_events",
+    }
     try:
         engine = get_engine(url, settings=resolved_settings)
         existing = set(inspect(engine).get_table_names())

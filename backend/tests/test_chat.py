@@ -37,7 +37,7 @@ def test_chat_rejects_oversized_history(client: TestClient) -> None:
 
 
 @patch("app.chat.routes.stream_rag_answer")
-@patch("app.chat.routes._save_assistant_message")
+@patch("app.chat.routes._persist_turn_usage")
 @patch("app.chat.routes._ensure_thread")
 def test_chat_streams_rag_answer_with_thread_headers(
     mock_ensure: MagicMock,
@@ -48,7 +48,7 @@ def test_chat_streams_rag_answer_with_thread_headers(
     thread_id = uuid.uuid4()
     mock_ensure.return_value = (thread_id, "What is CHW?")
 
-    async def fake_stream(_query):
+    async def fake_stream(_query, capture=None):
         yield "Grounded "
         yield "answer"
 
@@ -66,7 +66,7 @@ def test_chat_streams_rag_answer_with_thread_headers(
     mock_stream.assert_called_once()
     mock_save.assert_called_once()
     assert mock_save.call_args.args[0] == thread_id
-    assert mock_save.call_args.args[1] == "Grounded answer"
+    assert mock_save.call_args.kwargs["assistant_content"] == "Grounded answer"
 
 
 @patch("app.chat.routes._ensure_thread", side_effect=LookupError("missing"))

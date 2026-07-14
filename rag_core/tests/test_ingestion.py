@@ -21,9 +21,10 @@ def _session_cm(db: MagicMock) -> MagicMock:
 
 
 @patch("rag_core.rag.ingestion.get_session")
+@patch("rag_core.rag.ingestion.record_usage_event")
 @patch("rag_core.rag.ingestion.update_document_status")
 @patch("rag_core.rag.ingestion.insert_chunks")
-@patch("rag_core.rag.ingestion.embed_texts")
+@patch("rag_core.rag.ingestion.embed_texts_with_usage")
 @patch("rag_core.rag.ingestion.chunk_pages")
 @patch("rag_core.rag.ingestion.extract_pdf_pages")
 @patch("rag_core.rag.ingestion.create_document")
@@ -34,15 +35,26 @@ def test_ingest_pdf_happy_path(
     mock_embed: MagicMock,
     mock_insert: MagicMock,
     mock_status: MagicMock,
+    mock_record: MagicMock,
     mock_get_session: MagicMock,
 ) -> None:
+    from rag_core.rag.embeddings import EmbeddingResult
+    from rag_core.services.usage_service import TokenUsage
+
     document_id = uuid.uuid4()
     document = Document(filename="doc.pdf", status=DocumentStatus.PROCESSING.value)
     document.id = document_id
     mock_create.return_value = document
     mock_extract.return_value = [PageText(1, "hello")]
     mock_chunk.return_value = [TextChunk(0, "hello", 1)]
-    mock_embed.return_value = [[0.1] * EMBEDDING_DIMENSION]
+    mock_embed.return_value = EmbeddingResult(
+        embeddings=[[0.1] * EMBEDDING_DIMENSION],
+        usage=TokenUsage(
+            prompt_tokens=2,
+            model="text-embedding-3-small",
+            is_embedding=True,
+        ),
+    )
 
     db1 = MagicMock()
     db2 = MagicMock()
@@ -52,6 +64,7 @@ def test_ingest_pdf_happy_path(
 
     assert result == IngestResult(document_id=document_id, filename="doc.pdf", chunk_count=1)
     mock_status.assert_called_with(db2, document_id, DocumentStatus.READY.value)
+    mock_record.assert_called_once()
     db2.commit.assert_called_once()
 
 
@@ -131,10 +144,20 @@ def test_ingest_pdf_integration_with_fake_embeddings(
     with (
         patch("rag_core.rag.pdf.PdfReader") as mock_reader,
         patch(
-            "rag_core.rag.ingestion.embed_texts",
-            return_value=[[0.01] * EMBEDDING_DIMENSION],
-        ),
+            "rag_core.rag.ingestion.embed_texts_with_usage",
+        ) as mock_embed,
     ):
+        from rag_core.rag.embeddings import EmbeddingResult
+        from rag_core.services.usage_service import TokenUsage
+
+        mock_embed.return_value = EmbeddingResult(
+            embeddings=[[0.01] * EMBEDDING_DIMENSION],
+            usage=TokenUsage(
+                prompt_tokens=8,
+                model="text-embedding-3-small",
+                is_embedding=True,
+            ),
+        )
         mock_reader.return_value.pages = [page]
         result = ingest_pdf(b"%PDF-fake", filename="integration.pdf")
 

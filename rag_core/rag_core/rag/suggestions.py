@@ -10,9 +10,14 @@ from rag_core.core.config import get_settings
 from rag_core.core.logging import get_logger
 from rag_core.core.openai_client import create_chat_completion
 from rag_core.db.session import get_session
+from rag_core.models.usage_event import UsageKind
 from rag_core.services.document_service import (
     DocumentSnippet,
     sample_ready_document_snippets,
+)
+from rag_core.services.usage_service import (
+    record_usage_event,
+    usage_from_openai_response,
 )
 
 logger = get_logger(__name__)
@@ -130,8 +135,21 @@ async def suggest_chat_topics(*, limit: int = MAX_TOPICS) -> list[str]:
         )
         content = response.choices[0].message.content or ""
         topics = _parse_topics(content, limit=cap)
+        usage = usage_from_openai_response(
+            response,
+            model=settings.generation_model,
+            is_embedding=False,
+        )
+        with get_session() as db:
+            record_usage_event(db, kind=UsageKind.SUGGESTION, usage=usage)
+            db.commit()
         if topics:
-            logger.info("chat_topics_generated", count=len(topics), source="llm")
+            logger.info(
+                "chat_topics_generated",
+                count=len(topics),
+                source="llm",
+                tokens=usage.total_tokens,
+            )
             return topics
     except Exception as exc:
         logger.warning("chat_topics_llm_failed", error=str(exc))

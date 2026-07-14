@@ -22,6 +22,9 @@ class ChunkInsert:
     content: str
     page_number: int | None
     embedding: list[float]
+    prompt_tokens: int | None = None
+    estimated_cost_usd: object | None = None
+    model: str | None = None
 
 
 def create_document(
@@ -59,6 +62,9 @@ def insert_chunks(
                 content=chunk.content,
                 page_number=chunk.page_number,
                 embedding=chunk.embedding,
+                prompt_tokens=chunk.prompt_tokens,
+                estimated_cost_usd=chunk.estimated_cost_usd,
+                model=chunk.model,
             )
         )
 

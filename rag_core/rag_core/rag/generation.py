@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any
 
 from rag_core.core.config import get_settings
@@ -14,6 +15,7 @@ from rag_core.rag.reranking import rerank_chunks
 from rag_core.rag.retrieval import retrieve_chunks_async
 from rag_core.rag.schemas import ChatQuery, ChatTurn, RetrievedChunk
 from rag_core.services.document_service import list_ready_document_filenames
+from rag_core.services.usage_service import TokenUsage, usage_from_openai_response
 
 logger = get_logger(__name__)
 
@@ -43,6 +45,15 @@ def format_no_match_answer(filenames: list[str]) -> str:
 
 # Back-compat alias for the empty-corpus fallback text.
 EMPTY_CORPUS_MESSAGE = format_no_match_answer([])
+
+
+@dataclass
+class RagStreamCapture:
+    """Filled by ``stream_rag_answer`` as work progresses."""
+
+    query_embed_usage: TokenUsage | None = None
+    completion_usage: TokenUsage | None = None
+    used_llm: bool = False
 
 
 def list_available_documents(limit: int = 10) -> list[str]:
@@ -95,16 +106,35 @@ async def stream_chat_tokens(
     messages: list[dict[str, Any]],
     *,
     model: str | None = None,
+    capture: RagStreamCapture | None = None,
 ) -> AsyncIterator[str]:
     """Yield content deltas from a streamed chat completion."""
     settings = get_settings()
     resolved_model = model or settings.generation_model
-    stream = await create_chat_completion(
-        model=resolved_model,
-        messages=messages,
-        stream=True,
-    )
+    create_kwargs: dict[str, Any] = {
+        "model": resolved_model,
+        "messages": messages,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    try:
+        stream = await create_chat_completion(**create_kwargs)
+    except TypeError:
+        # Older clients / proxies may reject stream_options.
+        create_kwargs.pop("stream_options", None)
+        stream = await create_chat_completion(**create_kwargs)
+
+    if capture is not None:
+        capture.used_llm = True
+
     async for event in stream:
+        usage = getattr(event, "usage", None)
+        if usage is not None and capture is not None:
+            capture.completion_usage = usage_from_openai_response(
+                event,
+                model=resolved_model,
+                is_embedding=False,
+            )
         choices = getattr(event, "choices", None) or []
         if not choices:
             continue
@@ -119,9 +149,16 @@ async def _yield_text(text: str) -> AsyncIterator[str]:
         yield text
 
 
-async def stream_rag_answer(query: ChatQuery) -> AsyncIterator[str]:
+async def stream_rag_answer(
+    query: ChatQuery,
+    *,
+    capture: RagStreamCapture | None = None,
+) -> AsyncIterator[str]:
     """Retrieve → rerank → stream grounded answer, or document catalog on miss."""
-    chunks, query_embedding = await retrieve_chunks_async(query.input)
+    sink = capture or RagStreamCapture()
+    chunks, query_embedding, embed_usage = await retrieve_chunks_async(query.input)
+    sink.query_embed_usage = embed_usage
+
     selected = (
         rerank_chunks(query_embedding, chunks) if chunks and query_embedding else []
     )
@@ -147,5 +184,5 @@ async def stream_rag_answer(query: ChatQuery) -> AsyncIterator[str]:
         context_chunks=len(selected),
         history_turns=len(query.history),
     )
-    async for token in stream_chat_tokens(messages):
+    async for token in stream_chat_tokens(messages, capture=sink):
         yield token

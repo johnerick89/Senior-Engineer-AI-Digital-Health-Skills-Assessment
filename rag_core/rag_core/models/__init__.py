@@ -5,6 +5,7 @@ from rag_core.models.chat_message import ChatMessage
 from rag_core.models.chat_thread import ChatThread
 from rag_core.models.document import Document, DocumentStatus
 from rag_core.models.document_chunk import DocumentChunk
+from rag_core.models.usage_event import UsageEvent, UsageKind
 
 __all__ = [
     "BaseModel",
@@ -13,4 +14,6 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "DocumentStatus",
+    "UsageEvent",
+    "UsageKind",
 ]

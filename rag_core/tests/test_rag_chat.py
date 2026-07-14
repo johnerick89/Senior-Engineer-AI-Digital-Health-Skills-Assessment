@@ -79,12 +79,18 @@ def test_retrieve_with_session_maps_rows() -> None:
 
 
 @patch("rag_core.rag.retrieval.get_session")
-@patch("rag_core.rag.retrieval.embed_texts")
+@patch("rag_core.rag.retrieval.embed_texts_with_usage")
 def test_retrieve_chunks_embeds_and_queries(
     mock_embed: MagicMock,
     mock_get_session: MagicMock,
 ) -> None:
-    mock_embed.return_value = [[0.5, 0.5]]
+    from rag_core.rag.embeddings import EmbeddingResult
+    from rag_core.services.usage_service import TokenUsage
+
+    mock_embed.return_value = EmbeddingResult(
+        embeddings=[[0.5, 0.5]],
+        usage=TokenUsage(prompt_tokens=2, model="text-embedding-3-small", is_embedding=True),
+    )
     db = MagicMock()
     db.execute.return_value.all.return_value = []
     cm = MagicMock()
@@ -92,7 +98,7 @@ def test_retrieve_chunks_embeds_and_queries(
     cm.__exit__.return_value = None
     mock_get_session.return_value = cm
 
-    chunks, embedding = retrieve_chunks("malaria protocol", k=3)
+    chunks, embedding, _usage = retrieve_chunks("malaria protocol", k=3)
     assert chunks == []
     assert embedding == [0.5, 0.5]
     mock_embed.assert_called_once_with(["malaria protocol"])
@@ -186,7 +192,7 @@ async def test_stream_rag_answer_empty_corpus_lists_fallback() -> None:
         patch(
             "rag_core.rag.generation.retrieve_chunks_async",
             new_callable=AsyncMock,
-            return_value=([], []),
+            return_value=([], [], None),
         ),
         patch(
             "rag_core.rag.generation.list_available_documents",
@@ -206,7 +212,7 @@ async def test_stream_rag_answer_no_match_lists_documents() -> None:
         patch(
             "rag_core.rag.generation.retrieve_chunks_async",
             new_callable=AsyncMock,
-            return_value=([chunk], [1.0, 0.0, 0.0]),
+            return_value=([chunk], [1.0, 0.0, 0.0], None),
         ),
         patch(
             "rag_core.rag.generation.rerank_chunks",
@@ -242,7 +248,7 @@ async def test_stream_rag_answer_does_not_short_circuit_capability_phrasing() ->
         patch(
             "rag_core.rag.generation.retrieve_chunks_async",
             new_callable=AsyncMock,
-            return_value=([chunk], [1.0, 0.0, 0.0]),
+            return_value=([chunk], [1.0, 0.0, 0.0], None),
         ) as mock_retrieve,
         patch(
             "rag_core.rag.generation.rerank_chunks",
@@ -277,7 +283,7 @@ async def test_stream_rag_answer_streams_model() -> None:
         patch(
             "rag_core.rag.generation.retrieve_chunks_async",
             new_callable=AsyncMock,
-            return_value=([chunk], [1.0, 0.0, 0.0]),
+            return_value=([chunk], [1.0, 0.0, 0.0], None),
         ),
         patch(
             "rag_core.rag.generation.rerank_chunks",

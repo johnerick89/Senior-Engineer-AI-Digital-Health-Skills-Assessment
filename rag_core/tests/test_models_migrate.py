@@ -25,6 +25,7 @@ def test_models_registered_on_metadata() -> None:
         "document_chunks",
         "chat_threads",
         "chat_messages",
+        "usage_events",
     }.issubset(table_names)
 
 

@@ -8,6 +8,7 @@ import {
   FileText,
   Menu,
   X,
+  ChartColumn,
 } from "lucide-react";
 import {
   ChatSessionProvider,
@@ -18,6 +19,7 @@ import { mobileTitleForPath, NAV_ITEMS, type AppRoute } from "@/config/navigatio
 const NAV_ICONS = {
   "/": MessageCircle,
   "/upload": UploadIcon,
+  "/usage": ChartColumn,
   "/assignment": FileText,
 } as const;
 

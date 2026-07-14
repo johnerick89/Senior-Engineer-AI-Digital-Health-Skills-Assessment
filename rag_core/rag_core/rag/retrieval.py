@@ -12,8 +12,9 @@ from rag_core.core.logging import get_logger
 from rag_core.db.session import get_session
 from rag_core.models.document import Document, DocumentStatus
 from rag_core.models.document_chunk import DocumentChunk
-from rag_core.rag.embeddings import EMBEDDING_MODEL, embed_texts
+from rag_core.rag.embeddings import EMBEDDING_MODEL, embed_texts_with_usage
 from rag_core.rag.schemas import RetrievedChunk
+from rag_core.services.usage_service import TokenUsage
 
 logger = get_logger(__name__)
 
@@ -56,25 +57,24 @@ def retrieve_chunks(
     *,
     k: int | None = None,
     query_embedding: list[float] | None = None,
-) -> tuple[list[RetrievedChunk], list[float]]:
-    """Return top-k chunks by cosine distance and the query embedding used.
-
-    If ``query_embedding`` is provided, embedding generation is skipped.
-    """
+) -> tuple[list[RetrievedChunk], list[float], TokenUsage | None]:
+    """Return top-k chunks, the query embedding used, and optional embed usage."""
     text = query.strip()
     if not text:
-        return [], []
+        return [], [], None
 
     settings = get_settings()
     top_k = k if k is not None else settings.retrieval_k
     if top_k <= 0:
-        return [], []
+        return [], [], None
 
+    embed_usage: TokenUsage | None = None
     if query_embedding is None:
-        vectors = embed_texts([text])
-        if not vectors:
-            return [], []
-        query_embedding = vectors[0]
+        result = embed_texts_with_usage([text])
+        if not result.embeddings:
+            return [], [], None
+        query_embedding = result.embeddings[0]
+        embed_usage = result.usage
 
     with get_session() as db:
         chunks = _retrieve_with_session(db, query_embedding, top_k)
@@ -85,33 +85,33 @@ def retrieve_chunks(
         k=top_k,
         hits=len(chunks),
     )
-    return chunks, query_embedding
+    return chunks, query_embedding, embed_usage
 
 
 async def retrieve_chunks_async(
     query: str,
     *,
     k: int | None = None,
-) -> tuple[list[RetrievedChunk], list[float]]:
+) -> tuple[list[RetrievedChunk], list[float], TokenUsage | None]:
     """Async wrapper: embed via async path, run DB fetch in a thread."""
-    from rag_core.core.openai_client import create_embeddings
-    from rag_core.rag.embeddings import EMBEDDING_MODEL as MODEL
+    from rag_core.rag.embeddings import embed_texts_with_usage_async
 
     text = query.strip()
     if not text:
-        return [], []
+        return [], [], None
 
     settings = get_settings()
     top_k = k if k is not None else settings.retrieval_k
     if top_k <= 0:
-        return [], []
+        return [], [], None
 
-    response = await create_embeddings(model=MODEL, input=[text])
-    query_embedding = list(response.data[0].embedding)
+    result = await embed_texts_with_usage_async([text])
+    query_embedding = list(result.embeddings[0])
 
-    return await asyncio.to_thread(
+    chunks, embedding, _ = await asyncio.to_thread(
         retrieve_chunks,
         text,
         k=top_k,
         query_embedding=query_embedding,
     )
+    return chunks, embedding, result.usage

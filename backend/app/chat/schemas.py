@@ -49,7 +49,35 @@ class ChatMessageOut(BaseModel):
     role: Literal["user", "assistant"]
     content: str
     created_at: datetime | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    estimated_cost_usd: float | None = None
+    model: str | None = None
 
 
 class ChatSuggestionsResponse(BaseModel):
     topics: list[str] = Field(default_factory=list, max_length=5)
+
+
+class ChatUsageOut(BaseModel):
+    thread_id: uuid.UUID
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+
+
+class UsageBucketOut(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+
+
+class UsageSummaryOut(BaseModel):
+    chats: UsageBucketOut
+    suggestions: UsageBucketOut
+    embeddings: UsageBucketOut
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0

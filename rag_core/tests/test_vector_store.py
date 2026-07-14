@@ -56,6 +56,7 @@ def test_vector_store_is_ready_true_when_all_tables_exist(
         "document_chunks",
         "chat_threads",
         "chat_messages",
+        "usage_events",
     ]
     settings = Settings(_env_file=None, database_url="postgresql://settings:5432/rag")
 

@@ -111,6 +111,11 @@ def add_message(
     *,
     role: str,
     content: str,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    total_tokens: int | None = None,
+    estimated_cost_usd: object | None = None,
+    model: str | None = None,
 ) -> ChatMessage:
     """Insert a chat_messages row (flushed, not committed)."""
     if role not in ("user", "assistant"):
@@ -118,7 +123,16 @@ def add_message(
     text = content.strip()
     if not text:
         raise ValueError("content must not be blank")
-    message = ChatMessage(thread_id=thread_id, role=role, content=text)
+    message = ChatMessage(
+        thread_id=thread_id,
+        role=role,
+        content=text,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        estimated_cost_usd=estimated_cost_usd,
+        model=model,
+    )
     db.add(message)
     db.flush()
     return message
@@ -142,3 +156,15 @@ def list_messages(db: Session, thread_id: uuid.UUID) -> list[ChatMessage]:
         .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
     )
     return list(db.scalars(stmt).all())
+
+
+def get_latest_user_message(db: Session, thread_id: uuid.UUID) -> ChatMessage | None:
+    """Return the most recent user message on a thread, if any."""
+    stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.thread_id == thread_id)
+        .where(ChatMessage.role == "user")
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        .limit(1)
+    )
+    return db.scalars(stmt).first()
