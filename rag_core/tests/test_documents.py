@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from rag_core.embeddings import EMBEDDING_DIMENSION
 from rag_core.models.document import Document, DocumentStatus
+from rag_core.rag.embeddings import EMBEDDING_DIMENSION
 from rag_core.services.document_service import (
     ChunkInsert,
     create_document,

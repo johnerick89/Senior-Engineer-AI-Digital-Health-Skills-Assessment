@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 from pgvector.sqlalchemy import Vector
 
-from rag_core.embeddings import EMBEDDING_DIMENSION
+from rag_core.rag.embeddings import EMBEDDING_DIMENSION
 
 revision: str = "0001_initial_rag_schema"
 down_revision: Union[str, Sequence[str], None] = None

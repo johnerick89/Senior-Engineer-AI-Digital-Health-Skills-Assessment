@@ -116,6 +116,7 @@ async def health():
             "health": "/",
             "assignment": "/assignment",
             "chat": "/chat",
+            "upload": "/upload",
         },
     }
 

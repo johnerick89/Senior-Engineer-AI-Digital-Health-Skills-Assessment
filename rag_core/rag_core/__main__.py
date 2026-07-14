@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from rag_core.core.logging import configure_logging, get_logger
-from rag_core.vector_store import initialize_vector_store, vector_store_is_ready
+from rag_core.rag.vector_store import initialize_vector_store, vector_store_is_ready
 
 logger = get_logger(__name__)
 
@@ -29,7 +29,7 @@ def cmd_migrate() -> None:
 
 def cmd_ingest(pdf_path: Path) -> None:
     """Ingest a single PDF into the vector store."""
-    from rag_core.ingestion import ingest_pdf
+    from rag_core.rag.ingestion import ingest_pdf
 
     if not pdf_path.is_file():
         raise SystemExit(f"File not found: {pdf_path}")

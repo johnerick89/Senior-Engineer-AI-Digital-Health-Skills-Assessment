@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rag_core.pdf import PageText
+from rag_core.rag.pdf import PageText
 
 # Match litigation-prep-assistant defaults (character-based, overlapping).
 CHUNK_SIZE = 800

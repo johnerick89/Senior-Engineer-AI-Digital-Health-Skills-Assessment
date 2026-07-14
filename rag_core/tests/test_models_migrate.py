@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 from rag_core.db.base import Base
 from rag_core.db.migrate import get_alembic_config, run_migrations, sqlalchemy_url
-from rag_core.embeddings import EMBEDDING_DIMENSION
 from rag_core.models import ChatMessage, Document, DocumentChunk
+from rag_core.rag.embeddings import EMBEDDING_DIMENSION
 
 
 def test_sqlalchemy_url_uses_psycopg_dialect() -> None:

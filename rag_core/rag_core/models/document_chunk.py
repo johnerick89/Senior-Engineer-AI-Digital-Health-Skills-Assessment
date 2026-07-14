@@ -10,7 +10,7 @@ from sqlalchemy import ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from rag_core.embeddings import EMBEDDING_DIMENSION
+from rag_core.rag.embeddings import EMBEDDING_DIMENSION
 from rag_core.models.base import BaseModel
 
 if TYPE_CHECKING:

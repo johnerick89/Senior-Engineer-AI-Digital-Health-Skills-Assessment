@@ -8,7 +8,7 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from rag_core.embeddings import EMBEDDING_DIMENSION
+from rag_core.rag.embeddings import EMBEDDING_DIMENSION
 from rag_core.models.document import Document, DocumentStatus
 from rag_core.models.document_chunk import DocumentChunk
 

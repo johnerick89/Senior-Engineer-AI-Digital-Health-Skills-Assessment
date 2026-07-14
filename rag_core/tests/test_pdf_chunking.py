@@ -1,4 +1,4 @@
-"""Tests for rag_core.pdf and rag_core.chunking."""
+"""Tests for rag_core.rag.pdf and rag_core.rag.chunking."""
 
 from io import BytesIO
 from unittest.mock import MagicMock, patch
@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pypdf import PdfWriter
 
-from rag_core.chunking import CHUNK_OVERLAP, CHUNK_SIZE, TextChunk, chunk_pages, chunk_text
-from rag_core.pdf import PageText, PdfExtractionError, extract_pdf_pages
+from rag_core.rag.chunking import CHUNK_OVERLAP, CHUNK_SIZE, TextChunk, chunk_pages, chunk_text
+from rag_core.rag.pdf import PageText, PdfExtractionError, extract_pdf_pages
 
 
 def _minimal_pdf_bytes(text: str = "Hello RAG") -> bytes:
@@ -64,7 +64,7 @@ def test_extract_pdf_pages_rejects_invalid_bytes() -> None:
         extract_pdf_pages(b"not-a-pdf")
 
 
-@patch("rag_core.pdf.PdfReader")
+@patch("rag_core.rag.pdf.PdfReader")
 def test_extract_pdf_pages_from_mocked_reader(mock_reader_cls: MagicMock) -> None:
     page1 = MagicMock()
     page1.extract_text.return_value = "Page one content"
@@ -80,7 +80,7 @@ def test_extract_pdf_pages_from_mocked_reader(mock_reader_cls: MagicMock) -> Non
     ]
 
 
-@patch("rag_core.pdf.PdfReader")
+@patch("rag_core.rag.pdf.PdfReader")
 def test_extract_pdf_pages_rejects_all_blank(mock_reader_cls: MagicMock) -> None:
     page = MagicMock()
     page.extract_text.return_value = "   "

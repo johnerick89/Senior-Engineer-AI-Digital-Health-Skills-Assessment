@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     Only settings that are genuinely environment-specific or safe to tune
     without a data migration live here. The embedding model, its dimension,
     and the pgvector distance metric are intentionally NOT here — they are
-    pinned as constants in ``embeddings.py`` / ``vector_store.py``, since
+    pinned as constants in ``rag.embeddings`` / ``rag.vector_store``, since
     changing them requires re-embedding existing data, not a config toggle.
     """
 
@@ -36,7 +36,12 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(
         default="",
         alias="OPENAI_API_KEY",
-        description="OpenAI API key for embeddings and generation.",
+        description="OpenAI API key for embeddings and generation (primary).",
+    )
+    openrouter_api_key: str = Field(
+        default="",
+        alias="OPENROUTER_API_KEY",
+        description="OpenRouter API key used when OpenAI fails or is unset.",
     )
 
     # Chat/generation model. Safe to override per environment — unlike the

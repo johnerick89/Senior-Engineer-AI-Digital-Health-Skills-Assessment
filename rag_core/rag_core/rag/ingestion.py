@@ -7,12 +7,12 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from rag_core.chunking import chunk_pages
 from rag_core.core.logging import get_logger
 from rag_core.db.session import get_session
-from rag_core.embeddings import embed_texts
 from rag_core.models.document import DocumentStatus
-from rag_core.pdf import PdfExtractionError, extract_pdf_pages
+from rag_core.rag.chunking import chunk_pages
+from rag_core.rag.embeddings import embed_texts
+from rag_core.rag.pdf import PdfExtractionError, extract_pdf_pages
 from rag_core.services.document_service import (
     ChunkInsert,
     create_document,

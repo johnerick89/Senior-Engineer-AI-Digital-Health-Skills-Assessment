@@ -1,16 +1,23 @@
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     ports:
       - "6100:6100"
     volumes:
       - ./backend:/usr/src/LMH
+      - ./rag_core:/rag_core
+    env_file:
+      - ./rag_core/.env
     environment:
       - PORT=6100
       - WATCHFILES_FORCE_POLLING=true
+      - DATABASE_URL=postgresql://postgres:postgres@relational_db:5432/postgres
+      - PYTHONPATH=/usr/src/LMH:/rag_core
+    depends_on:
+      - relational_db
     command:
       [
         "uvicorn",

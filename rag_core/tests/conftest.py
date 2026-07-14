@@ -11,6 +11,7 @@ from rag_core.db.session import check_connection, get_engine
 _SETTINGS_ENV_VARS = (
     "DATABASE_URL",
     "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
     "RAG_CORE_GENERATION_MODEL",
     "RAG_CORE_MODEL",
     "RAG_CORE_RETRIEVAL_K",

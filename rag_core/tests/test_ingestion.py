@@ -1,4 +1,4 @@
-"""Tests for rag_core.ingestion.ingest_pdf."""
+"""Tests for rag_core.rag.ingestion.ingest_pdf."""
 
 import uuid
 from pathlib import Path
@@ -6,11 +6,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rag_core.chunking import TextChunk
-from rag_core.embeddings import EMBEDDING_DIMENSION
-from rag_core.ingestion import IngestResult, ingest_pdf
 from rag_core.models.document import Document, DocumentStatus
-from rag_core.pdf import PageText, PdfExtractionError
+from rag_core.rag.chunking import TextChunk
+from rag_core.rag.embeddings import EMBEDDING_DIMENSION
+from rag_core.rag.ingestion import IngestResult, ingest_pdf
+from rag_core.rag.pdf import PageText, PdfExtractionError
 
 
 def _session_cm(db: MagicMock) -> MagicMock:
@@ -20,13 +20,13 @@ def _session_cm(db: MagicMock) -> MagicMock:
     return cm
 
 
-@patch("rag_core.ingestion.get_session")
-@patch("rag_core.ingestion.update_document_status")
-@patch("rag_core.ingestion.insert_chunks")
-@patch("rag_core.ingestion.embed_texts")
-@patch("rag_core.ingestion.chunk_pages")
-@patch("rag_core.ingestion.extract_pdf_pages")
-@patch("rag_core.ingestion.create_document")
+@patch("rag_core.rag.ingestion.get_session")
+@patch("rag_core.rag.ingestion.update_document_status")
+@patch("rag_core.rag.ingestion.insert_chunks")
+@patch("rag_core.rag.ingestion.embed_texts")
+@patch("rag_core.rag.ingestion.chunk_pages")
+@patch("rag_core.rag.ingestion.extract_pdf_pages")
+@patch("rag_core.rag.ingestion.create_document")
 def test_ingest_pdf_happy_path(
     mock_create: MagicMock,
     mock_extract: MagicMock,
@@ -65,10 +65,10 @@ def test_ingest_pdf_rejects_non_pdf_filename() -> None:
         ingest_pdf(b"%PDF", filename="notes.txt")
 
 
-@patch("rag_core.ingestion.get_session")
-@patch("rag_core.ingestion.update_document_status")
-@patch("rag_core.ingestion.create_document")
-@patch("rag_core.ingestion.extract_pdf_pages", side_effect=PdfExtractionError("bad pdf"))
+@patch("rag_core.rag.ingestion.get_session")
+@patch("rag_core.rag.ingestion.update_document_status")
+@patch("rag_core.rag.ingestion.create_document")
+@patch("rag_core.rag.ingestion.extract_pdf_pages", side_effect=PdfExtractionError("bad pdf"))
 def test_ingest_pdf_marks_failed_on_error(
     _mock_extract: MagicMock,
     mock_create: MagicMock,
@@ -90,7 +90,7 @@ def test_ingest_pdf_marks_failed_on_error(
     mock_status.assert_called_with(db_fail, document_id, DocumentStatus.FAILED.value)
 
 
-@patch("rag_core.ingestion.ingest_pdf")
+@patch("rag_core.rag.ingestion.ingest_pdf")
 def test_cli_ingest_invokes_pipeline(
     mock_ingest: MagicMock,
     tmp_path: Path,
@@ -117,7 +117,7 @@ def test_ingest_pdf_integration_with_fake_embeddings(
 ) -> None:
     """End-to-end against Postgres; OpenAI is mocked."""
     from rag_core.core.config import Settings, get_settings
-    from rag_core.vector_store import initialize_vector_store
+    from rag_core.rag.vector_store import initialize_vector_store
 
     get_settings.cache_clear()
     monkeypatch.setenv("DATABASE_URL", integration_database_url)
@@ -129,9 +129,9 @@ def test_ingest_pdf_integration_with_fake_embeddings(
     page.extract_text.return_value = "Integration test content for RAG ingestion."
 
     with (
-        patch("rag_core.pdf.PdfReader") as mock_reader,
+        patch("rag_core.rag.pdf.PdfReader") as mock_reader,
         patch(
-            "rag_core.ingestion.embed_texts",
+            "rag_core.rag.ingestion.embed_texts",
             return_value=[[0.01] * EMBEDDING_DIMENSION],
         ),
     ):

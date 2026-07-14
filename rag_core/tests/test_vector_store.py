@@ -1,15 +1,15 @@
-"""Tests for rag_core.vector_store."""
+"""Tests for rag_core.rag.vector_store."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from rag_core.core.config import Settings
-from rag_core.vector_store import initialize_vector_store, vector_store_is_ready
+from rag_core.rag.vector_store import initialize_vector_store, vector_store_is_ready
 
 
-@patch("rag_core.vector_store.configure_engine")
-@patch("rag_core.vector_store.run_migrations")
+@patch("rag_core.rag.vector_store.configure_engine")
+@patch("rag_core.rag.vector_store.run_migrations")
 def test_initialize_vector_store_runs_migrations_and_configures_engine(
     mock_run_migrations: MagicMock,
     mock_configure_engine: MagicMock,
@@ -32,7 +32,7 @@ def test_initialize_vector_store_runs_migrations_and_configures_engine(
     )
 
 
-@patch("rag_core.vector_store.check_connection", return_value=False)
+@patch("rag_core.rag.vector_store.check_connection", return_value=False)
 def test_vector_store_is_ready_false_when_db_unreachable(
     _mock_check: MagicMock,
     isolated_settings_env: None,
@@ -42,9 +42,9 @@ def test_vector_store_is_ready_false_when_db_unreachable(
     assert vector_store_is_ready(settings=settings) is False
 
 
-@patch("rag_core.vector_store.check_connection", return_value=True)
-@patch("rag_core.vector_store.inspect")
-@patch("rag_core.vector_store.get_engine")
+@patch("rag_core.rag.vector_store.check_connection", return_value=True)
+@patch("rag_core.rag.vector_store.inspect")
+@patch("rag_core.rag.vector_store.get_engine")
 def test_vector_store_is_ready_true_when_all_tables_exist(
     mock_get_engine: MagicMock,
     mock_inspect: MagicMock,
