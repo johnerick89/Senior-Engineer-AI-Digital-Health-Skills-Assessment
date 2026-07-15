@@ -7,6 +7,8 @@ import logging
 import uuid
 from typing import Optional
 
+from starlette.datastructures import Headers
+
 import chainlit as cl
 
 from app.data_layer import ANONYMOUS_USER_ID, RagCoreDataLayer
@@ -19,6 +21,20 @@ from rag_core.rag.vector_store import initialize_vector_store
 logger = logging.getLogger(__name__)
 
 _INIT_DONE = False
+
+# Fixed demo credentials — auto-submitted by public/silent_login.js.
+DEMO_EMAIL = "john.doe@example.com"
+DEMO_PASSWORD = "1234"
+HEADER_AUTH_NAME = "X-LMH-Chainlit-Auth"
+
+
+def _demo_user(*, display_name: str | None = None) -> cl.User:
+    """Shared anonymous identity so sidebar threads match Next.js."""
+    return cl.User(
+        identifier=ANONYMOUS_USER_ID,
+        display_name=display_name or DEMO_EMAIL,
+        metadata={"provider": "credentials", "email": DEMO_EMAIL},
+    )
 
 
 def _ensure_schema() -> None:
@@ -40,13 +56,19 @@ def get_data_layer() -> RagCoreDataLayer:
 
 @cl.password_auth_callback
 def auth_callback(username: str, password: str) -> Optional[cl.User]:
-    """Accept any login; all sessions share the anonymous thread list."""
-    _ = password
-    return cl.User(
-        identifier=ANONYMOUS_USER_ID,
-        display_name=(username or "Guest").strip() or "Guest",
-        metadata={"provider": "credentials"},
-    )
+    """Accept fixed demo credentials (also used by silent_login.js)."""
+    if username.strip().lower() == DEMO_EMAIL and password == DEMO_PASSWORD:
+        return _demo_user(display_name=DEMO_EMAIL)
+    return None
+
+
+@cl.header_auth_callback
+def header_auth_callback(headers: Headers) -> Optional[cl.User]:
+    """Allow silent auth when the demo header is present (proxy / JS fallback)."""
+    value = headers.get(HEADER_AUTH_NAME) or headers.get(HEADER_AUTH_NAME.lower())
+    if value and value.strip().lower() == DEMO_EMAIL:
+        return _demo_user(display_name=DEMO_EMAIL)
+    return None
 
 
 @cl.set_starters

@@ -25,7 +25,7 @@ Building `chainlit_app` stalled resolving dependencies. To get containers runnin
 
 ## Scope intentionally deferred
 
-- **No authentication / multi-tenant users.** Chat is effectively single-tenant / anonymous: anyone with the UI can see threads and documents. Auth is not a listed requirement; building it would burn graded time. A production digital-health system would need real access control before use.
+- **No authentication / multi-tenant users.** The Next.js app has no login. Chainlit only has a **demo silent login** (`john.doe@example.com` / `1234`, auto-submitted via `public/silent_login.js`) because Chainlit’s history sidebar requires a user; the persisted user id stays `anonymous` and threads are still shared globally. A production digital-health system would need real access control before use.
 - **No mid-stream token/cost updates.** Usage is finalized after the stream ends (footer refresh + ledger write), not live while tokens arrive.
 - **No historical repricing.** Changing list prices in `token_pricing.py` does not rewrite old `chat_messages` / `usage_events` rows.
 - **No per-message cost chips in the chat UI (v1).** Thread totals live in a footer; app-level rollups live on `/usage`.

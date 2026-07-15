@@ -13,8 +13,6 @@ Architectural and design choices made while building the RAG assessment app, wit
 
 **Reasoning:** The assignment allows Chainlit “in place of **or alongside**” Next.js. The custom UI owns the graded experience (citations, upload status, nav); Chainlit is a second complete surface, not a debug-only tool.
 
-**Decision:** Chainlit uses a custom `BaseDataLayer` mapped onto the same `chat_threads` / `chat_messages` tables as Next.js, with a shared anonymous user id. PDF upload stays on the Next.js `/upload` page (Chainlit spontaneous upload disabled). Token/usage UI remains Next.js-only for v1.
-
 ---
 
 ## Shared RAG — `rag_core`
@@ -148,5 +146,33 @@ app/
 **Decision:** Backend/API base URL from `frontend/src/config/`, not hardcoded in components.
 
 **Decision:** Source citations / structured fields come from APIs as designed; do not scrape citations out of prose when structured fields exist.
+
+---
+
+## Chainlit surface
+
+**Decision:** Chainlit calls `rag_core` **in-process** (same as planned for both consumers). It does **not** call the FastAPI backend over HTTP. `DATABASE_URL` is wired into the Chainlit service so `rag_core` can open Postgres from that process; the connection/session objects still live inside `rag_core`.
+
+**Decision:** Chat parity with Next.js for this surface means: streaming RAG answers (`stream_rag_answer`), starter topics (`suggest_chat_topics`), and a left-hand thread history backed by the same `chat_threads` / `chat_messages` rows.
+
+**Decision:** Use Chainlit’s **native history sidebar** via a custom `BaseDataLayer` (`chainlit_app/app/data_layer.py`) mapped onto `chat_service`, rather than an in-chat Action-button thread picker.
+
+**Reasoning:** Actions would force an extra click to load past chats and hide threads from the built-in left nav. The data layer keeps UX closer to the Next.js sidebar.
+
+**Decision:** Accept Chainlit’s requirement that `/project/threads` returns **401 without a logged-in user**. Next.js needs no auth because it uses our own `GET /chats` APIs. Chainlit’s sidebar is framework-gated on auth — that is why Chainlit has a login path and the Next.js app does not.
+
+**Decision (auth workaround):** Demo-only silent login so users are not stuck on a login form:
+
+- Fixed credentials: `john.doe@example.com` / `1234` (`password_auth_callback`)
+- Optional header auth: `X-LMH-Chainlit-Auth: john.doe@example.com` (`header_auth_callback`)
+- `public/silent_login.js` (loaded via `custom_js`) POSTs `/login` (fallback `/auth/header`) then reloads once if `/user` is unauthenticated
+
+A server **startup script cannot** log visitors in: auth cookies live in the browser. Auto-submit JS (and header auth for proxies) are the workable paths.
+
+**Decision:** Persist Chainlit’s user **identifier** as `anonymous` (display name can show the demo email) so `get_thread_author` / sidebar ACL align and threads remain **shared** with Next.js (single-tenant list, same as the rest of the app).
+
+**Decision:** Thin turn helpers live in `chainlit_app/app/turn.py` (mirror of `backend/app/services/chat.py`) for this pass — not extracted into `rag_core` yet.
+
+**Decision:** PDF upload and the Usage page stay on Next.js only. Chainlit spontaneous file upload is disabled. No token/cost footer in Chainlit v1.
 
 ---
