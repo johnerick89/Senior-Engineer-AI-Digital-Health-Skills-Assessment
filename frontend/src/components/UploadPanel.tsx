@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   File,
   Trash2,
@@ -17,8 +17,17 @@ type UploadedDoc = {
   sizeKb: number;
   status: DocStatus;
   uploadedAt: string;
-  documentId?: string;
   error?: string;
+};
+
+type DocumentApiRow = {
+  id: string;
+  filename: string;
+  status: DocStatus;
+  size_kb: number;
+  chunk_count: number;
+  uploaded_at: string;
+  error_message: string | null;
 };
 
 type UploadStreamResult = {
@@ -38,12 +47,64 @@ function isPdfFile(file: File): boolean {
   );
 }
 
+function formatUploadedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function mapApiDoc(row: DocumentApiRow): UploadedDoc {
+  return {
+    id: row.id,
+    name: row.filename,
+    sizeKb: row.size_kb,
+    status: row.status,
+    uploadedAt: formatUploadedAt(row.uploaded_at),
+    error: row.error_message ?? undefined,
+  };
+}
+
 export default function UploadPanel() {
   const [docs, setDocs] = useState<UploadedDoc[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingList, setIsLoadingList] = useState(true);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refreshDocuments = useCallback(async () => {
+    const response = await fetch(`${clientConfig.apiV1Url}/documents`);
+    if (!response.ok) {
+      throw new Error(`Failed to load documents (${response.status})`);
+    }
+    const data = (await response.json()) as DocumentApiRow[];
+    setDocs(data.map(mapApiDoc));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setIsLoadingList(true);
+      setBatchError(null);
+      try {
+        await refreshDocuments();
+      } catch {
+        if (!cancelled) {
+          setBatchError("Could not load ingested documents.");
+          setDocs([]);
+        }
+      } finally {
+        if (!cancelled) setIsLoadingList(false);
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshDocuments]);
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0 || isUploading) return;
@@ -84,7 +145,7 @@ export default function UploadPanel() {
     let resultIndex = 0;
 
     try {
-      const response = await fetch(`${clientConfig.backendUrl}/upload`, {
+      const response = await fetch(`${clientConfig.apiV1Url}/documents`, {
         method: "POST",
         body: formData,
       });
@@ -141,9 +202,9 @@ export default function UploadPanel() {
               doc.id === targetId
                 ? {
                     ...doc,
+                    id: result.document_id ?? doc.id,
                     name: result.filename || doc.name,
                     status: result.status,
-                    documentId: result.document_id ?? undefined,
                     error: result.error ?? undefined,
                   }
                 : doc,
@@ -161,15 +222,21 @@ export default function UploadPanel() {
               doc.id === targetId
                 ? {
                     ...doc,
+                    id: result.document_id ?? doc.id,
                     name: result.filename || doc.name,
                     status: result.status,
-                    documentId: result.document_id ?? undefined,
                     error: result.error ?? undefined,
                   }
                 : doc,
             ),
           );
         }
+      }
+
+      try {
+        await refreshDocuments();
+      } catch {
+        // Keep optimistic stream state if refetch fails.
       }
     } catch (error) {
       const message =
@@ -190,8 +257,36 @@ export default function UploadPanel() {
     }
   }
 
-  function removeDoc(id: string) {
-    setDocs((prev) => prev.filter((doc) => doc.id !== id));
+  async function removeDoc(id: string) {
+    if (isDeletingId || id.startsWith("upload-")) {
+      setDocs((prev) => prev.filter((doc) => doc.id !== id));
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Remove this document and its embeddings from the RAG index?",
+    );
+    if (!confirmed) return;
+
+    setIsDeletingId(id);
+    setBatchError(null);
+    try {
+      const response = await fetch(`${clientConfig.apiV1Url}/documents/${id}`, {
+        method: "DELETE",
+      });
+      if (response.status === 404) {
+        setDocs((prev) => prev.filter((doc) => doc.id !== id));
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`Delete failed (${response.status})`);
+      }
+      setDocs((prev) => prev.filter((doc) => doc.id !== id));
+    } catch {
+      setBatchError("Could not delete document.");
+    } finally {
+      setIsDeletingId(null);
+    }
   }
 
   return (
@@ -253,34 +348,41 @@ export default function UploadPanel() {
         Ingested documents
       </h2>
       <div className="flex flex-col gap-2">
-        {docs.map((doc) => (
-          <div
-            key={doc.id}
-            className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3"
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <File className="h-4 w-4 shrink-0 text-slate-400" />
-              <div className="min-w-0">
-                <p className="truncate text-sm text-slate-800">{doc.name}</p>
-                <p className="text-xs text-slate-400">
-                  {doc.sizeKb.toLocaleString()} KB · {doc.uploadedAt}
-                  {doc.error ? ` · ${doc.error}` : ""}
-                </p>
+        {isLoadingList && (
+          <p className="py-6 text-center text-sm text-slate-400">
+            Loading documents…
+          </p>
+        )}
+        {!isLoadingList &&
+          docs.map((doc) => (
+            <div
+              key={doc.id}
+              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <File className="h-4 w-4 shrink-0 text-slate-400" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-slate-800">{doc.name}</p>
+                  <p className="text-xs text-slate-400">
+                    {doc.sizeKb.toLocaleString()} KB · {doc.uploadedAt}
+                    {doc.error ? ` · ${doc.error}` : ""}
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <StatusBadge status={doc.status} />
+                <button
+                  onClick={() => void removeDoc(doc.id)}
+                  disabled={isDeletingId === doc.id}
+                  aria-label={`Remove ${doc.name}`}
+                  className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
-              <StatusBadge status={doc.status} />
-              <button
-                onClick={() => removeDoc(doc.id)}
-                aria-label={`Remove ${doc.name}`}
-                className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-        {docs.length === 0 && (
+          ))}
+        {!isLoadingList && docs.length === 0 && (
           <p className="py-6 text-center text-sm text-slate-400">
             No documents uploaded yet.
           </p>

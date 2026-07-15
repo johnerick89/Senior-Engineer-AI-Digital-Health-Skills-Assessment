@@ -1,11 +1,13 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.chat import router as chat_router
-from app.api.home import router as home_router
-from app.api.upload import router as upload_router
+from app.api.chats import router as chats_router
+from app.api.documents import router as documents_router
+from app.api.home import api_router as home_api_router
+from app.api.home import root_router as home_root_router
+from app.api.usage import router as usage_router
 
 
 @asynccontextmanager
@@ -34,6 +36,11 @@ app.add_middleware(
     expose_headers=["X-Chat-Id", "X-Chat-Title"],
 )
 
-app.include_router(home_router)
-app.include_router(chat_router)
-app.include_router(upload_router)
+api_v1 = APIRouter(prefix="/api/v1")
+api_v1.include_router(home_api_router)
+api_v1.include_router(chats_router)
+api_v1.include_router(documents_router)
+api_v1.include_router(usage_router)
+
+app.include_router(home_root_router)
+app.include_router(api_v1)

@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS {DOCUMENTS_TABLE} (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     filename TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'processing',
+    size_bytes INTEGER,
+    error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

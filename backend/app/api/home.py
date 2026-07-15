@@ -3,7 +3,8 @@
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
-router = APIRouter()
+root_router = APIRouter(tags=["health"])
+api_router = APIRouter(tags=["health"])
 
 ASSIGNMENT_HTML = """
 <html>
@@ -103,25 +104,33 @@ ASSIGNMENT_HTML = """
 </html>
 """
 
-
-@router.get("/")
-async def health():
-    """Backend health check."""
-    return {
-        "status": "ok",
-        "service": "lmh-rag-backend",
-        "endpoints": {
-            "health": "/",
-            "assignment": "/assignment",
-            "chat": "/chat",
-            "chats": "/chats",
-            "usage": "/usage/summary",
-            "upload": "/upload",
-        },
-    }
+HEALTH_PAYLOAD = {
+    "status": "ok",
+    "service": "lmh-rag-backend",
+    "endpoints": {
+        "health": "/api/v1/health",
+        "assignment": "/api/v1/assignment",
+        "chats": "/api/v1/chats",
+        "chat_suggestions": "/api/v1/chats/suggestions",
+        "usage": "/api/v1/usage",
+        "documents": "/api/v1/documents",
+    },
+}
 
 
-@router.get("/assignment", response_class=HTMLResponse)
+@root_router.get("/")
+async def health_root():
+    """Backend health check (ops-friendly root)."""
+    return HEALTH_PAYLOAD
+
+
+@api_router.get("/health")
+async def health_v1():
+    """Versioned health check."""
+    return HEALTH_PAYLOAD
+
+
+@api_router.get("/assignment", response_class=HTMLResponse)
 async def assignment():
     """Assignment brief page."""
     return ASSIGNMENT_HTML

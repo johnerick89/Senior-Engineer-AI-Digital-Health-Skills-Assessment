@@ -40,7 +40,7 @@ function formatUsd(amount: number): string {
 
 async function fetchThreadUsage(id: string): Promise<ThreadUsage | null> {
   try {
-    const response = await fetch(`${clientConfig.backendUrl}/chats/${id}/usage`);
+    const response = await fetch(`${clientConfig.apiV1Url}/chats/${id}/usage`);
     if (!response.ok) return null;
     return (await response.json()) as ThreadUsage;
   } catch {
@@ -104,7 +104,7 @@ export default function ChatPanel() {
       setError(null);
       try {
         const response = await fetch(
-          `${clientConfig.backendUrl}/chats/${activeThreadId}/messages`
+          `${clientConfig.apiV1Url}/chats/${activeThreadId}/messages`
         );
         if (!response.ok) {
           throw new Error(`Failed to load chat (${response.status})`);
@@ -168,7 +168,7 @@ export default function ChatPanel() {
       setIsStreaming(true);
 
       try {
-        const response = await fetch(`${clientConfig.backendUrl}/chat`, {
+        const response = await fetch(`${clientConfig.apiV1Url}/chats`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

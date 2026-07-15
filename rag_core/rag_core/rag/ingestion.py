@@ -59,7 +59,12 @@ def ingest_pdf(
         raise PdfExtractionError(f"Only PDF files are supported, got: {resolved_name}")
 
     with get_session() as db:
-        document = create_document(db, resolved_name, status=DocumentStatus.PROCESSING.value)
+        document = create_document(
+            db,
+            resolved_name,
+            status=DocumentStatus.PROCESSING.value,
+            size_bytes=len(data),
+        )
         db.commit()
         document_id = document.id
 
@@ -123,11 +128,16 @@ def ingest_pdf(
             filename=resolved_name,
             chunk_count=len(inserts),
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("ingest_failed", document_id=str(document_id), filename=resolved_name)
         try:
             with get_session() as db:
-                update_document_status(db, document_id, DocumentStatus.FAILED.value)
+                update_document_status(
+                    db,
+                    document_id,
+                    DocumentStatus.FAILED.value,
+                    error_message=str(exc)[:2000],
+                )
                 db.commit()
         except Exception:  # noqa: BLE001
             logger.exception("ingest_status_update_failed", document_id=str(document_id))

@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from rag_core.rag.embeddings import EMBEDDING_DIMENSION
 from rag_core.models.document import Document, DocumentStatus
 from rag_core.models.document_chunk import DocumentChunk
+from rag_core.rag.embeddings import EMBEDDING_DIMENSION
 
 
 @dataclass(frozen=True)
@@ -27,14 +28,32 @@ class ChunkInsert:
     model: str | None = None
 
 
+@dataclass(frozen=True)
+class DocumentListItem:
+    """Document row plus chunk count for API list responses."""
+
+    id: uuid.UUID
+    filename: str
+    status: str
+    size_bytes: int | None
+    chunk_count: int
+    uploaded_at: datetime
+    error_message: str | None
+
+
 def create_document(
     db: Session,
     filename: str,
     *,
     status: str = DocumentStatus.PROCESSING.value,
+    size_bytes: int | None = None,
 ) -> Document:
     """Insert a documents row and return the ORM instance (flushed, not committed)."""
-    document = Document(filename=filename, status=status)
+    document = Document(
+        filename=filename,
+        status=status,
+        size_bytes=size_bytes,
+    )
     db.add(document)
     db.flush()
     return document
@@ -76,12 +95,22 @@ def update_document_status(
     db: Session,
     document_id: uuid.UUID,
     status: str,
+    *,
+    error_message: str | None = None,
 ) -> Document:
-    """Update documents.status. Raises LookupError if the row is missing."""
+    """Update documents.status (and optional error_message).
+
+    Ready status clears ``error_message``. Failed status stores
+    ``error_message`` when provided. Raises LookupError if missing.
+    """
     document = db.get(Document, document_id)
     if document is None:
         raise LookupError(f"document {document_id} not found")
     document.status = status
+    if status == DocumentStatus.READY.value:
+        document.error_message = None
+    elif error_message is not None:
+        document.error_message = error_message
     db.flush()
     return document
 
@@ -89,6 +118,50 @@ def update_document_status(
 def get_document(db: Session, document_id: uuid.UUID) -> Document | None:
     """Return a document by id, or None."""
     return db.get(Document, document_id)
+
+
+def list_documents(db: Session) -> list[DocumentListItem]:
+    """Return all documents newest-first, with chunk counts."""
+    chunk_count = func.count(DocumentChunk.id).label("chunk_count")
+    stmt = (
+        select(Document, chunk_count)
+        .outerjoin(DocumentChunk, DocumentChunk.document_id == Document.id)
+        .group_by(Document.id)
+        .order_by(Document.created_at.desc())
+    )
+    rows = db.execute(stmt).all()
+    return [
+        DocumentListItem(
+            id=document.id,
+            filename=document.filename,
+            status=document.status,
+            size_bytes=document.size_bytes,
+            chunk_count=int(count or 0),
+            uploaded_at=document.created_at,
+            error_message=document.error_message,
+        )
+        for document, count in rows
+    ]
+
+
+def delete_document(db: Session, document_id: uuid.UUID) -> bool:
+    """Delete a document (chunks cascade via FK). Return False if missing."""
+    document = db.get(Document, document_id)
+    if document is None:
+        return False
+    db.delete(document)
+    db.flush()
+    return True
+
+
+def count_chunks_for_document(db: Session, document_id: uuid.UUID) -> int:
+    """Return the number of chunks for a document id."""
+    stmt = (
+        select(func.count())
+        .select_from(DocumentChunk)
+        .where(DocumentChunk.document_id == document_id)
+    )
+    return int(db.scalar(stmt) or 0)
 
 
 def list_ready_document_filenames(

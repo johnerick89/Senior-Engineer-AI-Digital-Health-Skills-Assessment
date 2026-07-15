@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Text, text
+from sqlalchemy import Integer, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from rag_core.models.base import BaseModel
@@ -34,6 +34,8 @@ class Document(BaseModel):
         default=DocumentStatus.PROCESSING.value,
         server_default=text("'processing'"),
     )
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     chunks: Mapped[list[DocumentChunk]] = relationship(
         "DocumentChunk",

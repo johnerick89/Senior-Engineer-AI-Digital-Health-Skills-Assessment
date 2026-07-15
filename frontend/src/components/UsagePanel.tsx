@@ -77,7 +77,7 @@ export default function UsagePanel() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${clientConfig.backendUrl}/usage/summary`);
+        const response = await fetch(`${clientConfig.apiV1Url}/usage`);
         if (!response.ok) {
           throw new Error(`Failed to load usage (${response.status})`);
         }

@@ -1,0 +1,5 @@
+# Test / local-dev extras (not needed in the production image)
+pytest>=8.3
+pytest-asyncio>=0.25
+httpx>=0.28
+pytest-cov>=6.0

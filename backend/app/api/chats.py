@@ -16,30 +16,29 @@ from app.schemas.chat import (
     ChatSuggestionsResponse,
     ChatThreadSummary,
     ChatUsageOut,
-    UsageSummaryOut,
 )
-from app.services.chat import bucket_out, ensure_thread, persist_turn_usage
+from app.services.chat import ensure_thread, persist_turn_usage
 from rag_core.db.session import get_session
 from rag_core.rag.generation import RagStreamCapture, stream_rag_answer
 from rag_core.rag.schemas import ChatQuery, ChatTurn as RagChatTurn
 from rag_core.rag.suggestions import suggest_chat_topics
 from rag_core.services import chat_service
-from rag_core.services.usage_service import summarize_app_usage, summarize_thread_usage
+from rag_core.services.usage_service import summarize_thread_usage
 
-router = APIRouter()
+router = APIRouter(prefix="/chats", tags=["chats"])
 
 CHAT_ID_HEADER = "X-Chat-Id"
 CHAT_TITLE_HEADER = "X-Chat-Title"
 
 
-@router.get("/chat/suggestions", response_model=ChatSuggestionsResponse)
+@router.get("/suggestions", response_model=ChatSuggestionsResponse)
 async def chat_suggestions() -> ChatSuggestionsResponse:
     """Return up to five document-grounded starter topics for a new chat."""
     topics = await suggest_chat_topics()
     return ChatSuggestionsResponse(topics=topics)
 
 
-@router.get("/chats", response_model=list[ChatThreadSummary])
+@router.get("", response_model=list[ChatThreadSummary])
 async def list_chats() -> list[ChatThreadSummary]:
     """Return recent chat threads for the sidebar."""
 
@@ -59,85 +58,8 @@ async def list_chats() -> list[ChatThreadSummary]:
     return await asyncio.to_thread(_load)
 
 
-@router.get("/chats/{thread_id}/messages", response_model=list[ChatMessageOut])
-async def get_chat_messages(thread_id: uuid.UUID) -> list[ChatMessageOut]:
-    """Return messages for a single thread in chronological order."""
-
-    def _load() -> list[ChatMessageOut]:
-        with get_session() as db:
-            thread = chat_service.get_thread(db, thread_id)
-            if thread is None:
-                raise LookupError("missing")
-            messages = chat_service.list_messages(db, thread_id)
-            return [
-                ChatMessageOut(
-                    id=message.id,
-                    role=message.role,  # type: ignore[arg-type]
-                    content=message.content,
-                    created_at=message.created_at,
-                    prompt_tokens=message.prompt_tokens,
-                    completion_tokens=message.completion_tokens,
-                    total_tokens=message.total_tokens,
-                    estimated_cost_usd=(
-                        float(message.estimated_cost_usd)
-                        if message.estimated_cost_usd is not None
-                        else None
-                    ),
-                    model=message.model,
-                )
-                for message in messages
-            ]
-
-    try:
-        return await asyncio.to_thread(_load)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail="Chat thread not found") from exc
-
-
-@router.get("/chats/{thread_id}/usage", response_model=ChatUsageOut)
-async def get_chat_usage(thread_id: uuid.UUID) -> ChatUsageOut:
-    """Return aggregated token/cost for one thread."""
-
-    def _load() -> ChatUsageOut:
-        with get_session() as db:
-            thread = chat_service.get_thread(db, thread_id)
-            if thread is None:
-                raise LookupError("missing")
-            summary = summarize_thread_usage(db, thread_id)
-            return ChatUsageOut(
-                thread_id=thread_id,
-                prompt_tokens=summary.prompt_tokens,
-                completion_tokens=summary.completion_tokens,
-                total_tokens=summary.total_tokens,
-                estimated_cost_usd=round(summary.estimated_cost_usd, 8),
-            )
-
-    try:
-        return await asyncio.to_thread(_load)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail="Chat thread not found") from exc
-
-
-@router.get("/usage/summary", response_model=UsageSummaryOut)
-async def usage_summary() -> UsageSummaryOut:
-    """App-wide usage rollup for the Usage page."""
-
-    def _load() -> UsageSummaryOut:
-        with get_session() as db:
-            summary = summarize_app_usage(db)
-            return UsageSummaryOut(
-                chats=bucket_out(summary.chats),
-                suggestions=bucket_out(summary.suggestions),
-                embeddings=bucket_out(summary.embeddings),
-                total_tokens=summary.total_tokens,
-                estimated_cost_usd=round(summary.estimated_cost_usd, 8),
-            )
-
-    return await asyncio.to_thread(_load)
-
-
-@router.post("/chat")
-async def chat(request: ChatRequest):
+@router.post("")
+async def create_chat(request: ChatRequest):
     """Stream a RAG answer and persist the turn on a chat thread."""
     try:
         thread_id, title = await asyncio.to_thread(ensure_thread, request)
@@ -176,3 +98,62 @@ async def chat(request: ChatRequest):
             "Access-Control-Expose-Headers": f"{CHAT_ID_HEADER}, {CHAT_TITLE_HEADER}",
         },
     )
+
+
+@router.get("/{thread_id}/messages", response_model=list[ChatMessageOut])
+async def get_chat_messages(thread_id: uuid.UUID) -> list[ChatMessageOut]:
+    """Return messages for a single thread in chronological order."""
+
+    def _load() -> list[ChatMessageOut]:
+        with get_session() as db:
+            thread = chat_service.get_thread(db, thread_id)
+            if thread is None:
+                raise LookupError("missing")
+            messages = chat_service.list_messages(db, thread_id)
+            return [
+                ChatMessageOut(
+                    id=message.id,
+                    role=message.role,  # type: ignore[arg-type]
+                    content=message.content,
+                    created_at=message.created_at,
+                    prompt_tokens=message.prompt_tokens,
+                    completion_tokens=message.completion_tokens,
+                    total_tokens=message.total_tokens,
+                    estimated_cost_usd=(
+                        float(message.estimated_cost_usd)
+                        if message.estimated_cost_usd is not None
+                        else None
+                    ),
+                    model=message.model,
+                )
+                for message in messages
+            ]
+
+    try:
+        return await asyncio.to_thread(_load)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Chat thread not found") from exc
+
+
+@router.get("/{thread_id}/usage", response_model=ChatUsageOut)
+async def get_chat_usage(thread_id: uuid.UUID) -> ChatUsageOut:
+    """Return aggregated token/cost for one thread."""
+
+    def _load() -> ChatUsageOut:
+        with get_session() as db:
+            thread = chat_service.get_thread(db, thread_id)
+            if thread is None:
+                raise LookupError("missing")
+            summary = summarize_thread_usage(db, thread_id)
+            return ChatUsageOut(
+                thread_id=thread_id,
+                prompt_tokens=summary.prompt_tokens,
+                completion_tokens=summary.completion_tokens,
+                total_tokens=summary.total_tokens,
+                estimated_cost_usd=round(summary.estimated_cost_usd, 8),
+            )
+
+    try:
+        return await asyncio.to_thread(_load)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Chat thread not found") from exc

@@ -100,7 +100,12 @@ def test_ingest_pdf_marks_failed_on_error(
     with pytest.raises(PdfExtractionError):
         ingest_pdf(b"%PDF", filename="bad.pdf")
 
-    mock_status.assert_called_with(db_fail, document_id, DocumentStatus.FAILED.value)
+    mock_status.assert_called_with(
+        db_fail,
+        document_id,
+        DocumentStatus.FAILED.value,
+        error_message="bad pdf",
+    )
 
 
 @patch("rag_core.rag.ingestion.ingest_pdf")

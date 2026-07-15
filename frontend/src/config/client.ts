@@ -1,5 +1,10 @@
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:6100";
+
 export const clientConfig = {
-  backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:6100",
+  backendUrl,
+  /** Versioned REST base used by all resource calls. */
+  apiV1Url: `${backendUrl.replace(/\/$/, "")}/api/v1`,
 };
 
 export type ChatTurn = {

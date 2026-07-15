@@ -1,13 +1,17 @@
-"""PDF upload validation and ingest helpers."""
+"""PDF upload validation and document management helpers."""
 
 from __future__ import annotations
 
 import logging
+import math
+import uuid
 
 from fastapi import HTTPException, UploadFile
 
-from app.schemas.upload import UploadFileResult
+from app.schemas.documents import DocumentOut, UploadFileResult
+from rag_core.db.session import get_session
 from rag_core.rag.ingestion import ingest_pdf
+from rag_core.services import document_service
 
 logger = logging.getLogger(__name__)
 
@@ -80,3 +84,37 @@ def ingest_one(filename: str, data: bytes) -> UploadFileResult:
             chunk_count=0,
             error=str(exc),
         )
+
+
+def size_bytes_to_kb(size_bytes: int | None) -> int:
+    """Convert byte length to whole KB for API responses."""
+    if not size_bytes or size_bytes <= 0:
+        return 0
+    return max(1, math.ceil(size_bytes / 1024))
+
+
+def list_documents() -> list[DocumentOut]:
+    """Load documents newest-first with chunk counts."""
+    with get_session() as db:
+        items = document_service.list_documents(db)
+        return [
+            DocumentOut(
+                id=item.id,
+                filename=item.filename,
+                status=item.status,
+                size_kb=size_bytes_to_kb(item.size_bytes),
+                chunk_count=item.chunk_count,
+                uploaded_at=item.uploaded_at,
+                error_message=item.error_message,
+            )
+            for item in items
+        ]
+
+
+def delete_document(document_id: uuid.UUID) -> bool:
+    """Delete a document and cascaded chunks. Return False if missing."""
+    with get_session() as db:
+        deleted = document_service.delete_document(db, document_id)
+        if deleted:
+            db.commit()
+        return deleted

@@ -33,7 +33,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
 
   const refreshThreads = useCallback(async () => {
     try {
-      const response = await fetch(`${clientConfig.backendUrl}/chats`);
+      const response = await fetch(`${clientConfig.apiV1Url}/chats`);
       if (!response.ok) return;
       const data = (await response.json()) as ChatThreadSummary[];
       setThreads(data);
@@ -56,7 +56,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
       setTopicsLoading(true);
       try {
         const response = await fetch(
-          `${clientConfig.backendUrl}/chat/suggestions`
+          `${clientConfig.apiV1Url}/chats/suggestions`
         );
         if (!response.ok) return;
         const data = (await response.json()) as { topics?: string[] };
