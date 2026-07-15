@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.chat.routes import router as chat_router
-from app.home.routes import router as home_router
-from app.upload.routes import router as upload_router
+from app.api.chat import router as chat_router
+from app.api.home import router as home_router
+from app.api.upload import router as upload_router
 
 
 @asynccontextmanager

@@ -36,9 +36,9 @@ def test_chat_rejects_oversized_history(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-@patch("app.chat.routes.stream_rag_answer")
-@patch("app.chat.routes._persist_turn_usage")
-@patch("app.chat.routes._ensure_thread")
+@patch("app.api.chat.stream_rag_answer")
+@patch("app.api.chat.persist_turn_usage")
+@patch("app.api.chat.ensure_thread")
 def test_chat_streams_rag_answer_with_thread_headers(
     mock_ensure: MagicMock,
     mock_save: MagicMock,
@@ -69,7 +69,7 @@ def test_chat_streams_rag_answer_with_thread_headers(
     assert mock_save.call_args.kwargs["assistant_content"] == "Grounded answer"
 
 
-@patch("app.chat.routes._ensure_thread", side_effect=LookupError("missing"))
+@patch("app.api.chat.ensure_thread", side_effect=LookupError("missing"))
 def test_chat_unknown_thread_returns_404(
     _mock_ensure: MagicMock,
     client: TestClient,
@@ -85,8 +85,8 @@ def test_chat_unknown_thread_returns_404(
     assert response.status_code == 404
 
 
-@patch("app.chat.routes.get_session")
-@patch("app.chat.routes.chat_service.list_threads")
+@patch("app.api.chat.get_session")
+@patch("app.api.chat.chat_service.list_threads")
 def test_list_chats(
     mock_list: MagicMock,
     mock_get_session: MagicMock,
@@ -113,7 +113,7 @@ def test_list_chats(
 
 
 @patch(
-    "app.chat.routes.suggest_chat_topics",
+    "app.api.chat.suggest_chat_topics",
     new_callable=AsyncMock,
     return_value=["What is ACT for malaria?", "Summarize CHW duties."],
 )

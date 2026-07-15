@@ -37,7 +37,7 @@ def test_upload_rejects_non_pdf(client: TestClient) -> None:
     assert "PDF" in response.json()["detail"]
 
 
-@patch("app.upload.routes.ingest_pdf")
+@patch("app.services.upload.ingest_pdf")
 def test_upload_streams_ready_ndjson(
     mock_ingest: MagicMock,
     client: TestClient,
@@ -63,7 +63,7 @@ def test_upload_streams_ready_ndjson(
     assert payload["document_id"] == "11111111-1111-1111-1111-111111111111"
 
 
-@patch("app.upload.routes.ingest_pdf", side_effect=RuntimeError("embed down"))
+@patch("app.services.upload.ingest_pdf", side_effect=RuntimeError("embed down"))
 def test_upload_streams_failed_and_continues(
     _mock_ingest: MagicMock,
     client: TestClient,

@@ -1,6 +1,4 @@
-"""
-This module contains FastAPI routes for Home page
-"""
+"""Home and health endpoints."""
 
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse

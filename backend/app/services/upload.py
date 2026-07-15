@@ -1,26 +1,21 @@
-"""PDF upload and rag_core ingestion routes."""
+"""PDF upload validation and ingest helpers."""
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import HTTPException, UploadFile
 
-from app.upload.schemas import UploadFileResult
+from app.schemas.upload import UploadFileResult
 from rag_core.rag.ingestion import ingest_pdf
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
-
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20MB, matches frontend copy
 
 
-def _is_pdf(upload: UploadFile) -> bool:
+def is_pdf(upload: UploadFile) -> bool:
+    """Return True when the upload looks like a PDF."""
     name = (upload.filename or "").lower()
     content_type = (upload.content_type or "").lower()
     return name.endswith(".pdf") or content_type in {
@@ -29,7 +24,7 @@ def _is_pdf(upload: UploadFile) -> bool:
     }
 
 
-async def _read_and_validate(
+async def read_and_validate(
     uploads: list[UploadFile],
 ) -> list[tuple[str, bytes]]:
     """Validate batch and return (filename, bytes) pairs.
@@ -42,7 +37,7 @@ async def _read_and_validate(
     prepared: list[tuple[str, bytes]] = []
     for upload in uploads:
         filename = upload.filename or "upload.pdf"
-        if not _is_pdf(upload):
+        if not is_pdf(upload):
             raise HTTPException(
                 status_code=400,
                 detail=f"Only PDF files are supported. Invalid file: {filename}",
@@ -65,7 +60,7 @@ async def _read_and_validate(
     return prepared
 
 
-def _ingest_one(filename: str, data: bytes) -> UploadFileResult:
+def ingest_one(filename: str, data: bytes) -> UploadFileResult:
     """Sync helper for asyncio.to_thread."""
     try:
         result = ingest_pdf(data, filename=filename)
@@ -85,18 +80,3 @@ def _ingest_one(filename: str, data: bytes) -> UploadFileResult:
             chunk_count=0,
             error=str(exc),
         )
-
-
-@router.post("/upload")
-async def upload_pdfs(
-    files: list[UploadFile] | None = File(default=None),
-) -> StreamingResponse:
-    """Validate PDFs, then stream NDJSON results as each file finishes ingest."""
-    prepared = await _read_and_validate(files or [])
-
-    async def generate() -> AsyncIterator[str]:
-        for filename, data in prepared:
-            result = await asyncio.to_thread(_ingest_one, filename, data)
-            yield result.model_dump_json() + "\n"
-
-    return StreamingResponse(generate(), media_type="application/x-ndjson")
