@@ -18,8 +18,12 @@ Building `chainlit_app` stalled resolving dependencies. To get containers runnin
 
 ### Route remapping
 
-- Backend root `/` is a health JSON endpoint; the assignment brief HTML moved to `/assignment`.
-- Frontend root `/` is the chat surface; the assignment brief page moved to `/assignment`.
+- Backend root `GET /` stays a health JSON endpoint; assignment HTML is at
+  `GET /api/v1/assignment` (also mirrored in the Next.js `/assignment` page).
+- Application APIs are under **`/api/v1`** with plural resources (e.g.
+  `POST /api/v1/chats`, `POST/GET/DELETE /api/v1/documents`). Pre-version paths
+  (`/chat`, `/upload`, …) were removed in one cutover — no aliases.
+- Frontend root `/` is the chat surface; the assignment brief page is `/assignment`.
 
 ---
 
@@ -30,6 +34,8 @@ Building `chainlit_app` stalled resolving dependencies. To get containers runnin
 - **No historical repricing.** Changing list prices in `token_pricing.py` does not rewrite old `chat_messages` / `usage_events` rows.
 - **No per-message cost chips in the chat UI (v1).** Thread totals live in a footer; app-level rollups live on `/usage`.
 - **Chainlit is not linked from the Next.js nav (current).** Nav is Chat /Upload / Usage / Assignment. Chainlit remains an independent surface on port `8000`. Deep-linking from nav (and surfacing its URL via `frontend/src/config/`) is optional later.
+- **No single-document detail API or reprocess.** `GET /documents/{id}` and re-ingest were scoped out; list + delete cover the upload-page needs.
+- **Deleting a document while `status=processing` is allowed.** Simpler than blocking; an in-flight ingest writing after delete should fail harmlessly against a missing parent.
 
 ---
 

@@ -8,7 +8,7 @@ Architectural and design choices made while building the RAG assessment app, wit
 
 **Decision:** Two independent, full chat surfaces:
 
-1. Custom Next.js (Pages Router) UI → backend `POST /chat` over HTTP
+1. Custom Next.js (Pages Router) UI → backend `POST /api/v1/chats` over HTTP
 2. Chainlit on port `8000` → imports `rag_core` in-process
 
 **Reasoning:** The assignment allows Chainlit “in place of **or alongside**” Next.js. The custom UI owns the graded experience (citations, upload status, nav); Chainlit is a second complete surface, not a debug-only tool.
@@ -35,7 +35,10 @@ Architectural and design choices made while building the RAG assessment app, wit
 
 **Decision:** Docker image `pgvector/pgvector:pg16`; the `vector` extension is created as part of schema / migration setup.
 
-**Decision:** **Alembic** owns schema versions under `rag_core/alembic/`(`0001_initial_rag_schema`, `0002_usage_columns`). Backend startup calls `initialize_vector_store()` → `run_migrations()`. Prefer migrations over ad-hoc `init.sql` only.
+**Decision:** **Alembic** owns schema versions under `rag_core/alembic/`
+(`0001_initial_rag_schema`, `0002_usage_columns`, `0003_document_metadata`).
+Backend startup calls `initialize_vector_store()` → `run_migrations()`. Prefer
+migrations over ad-hoc `init.sql` only.
 
 **Decision:** HNSW index with `vector_cosine_ops`; queries use cosine distance `<=>` — operator class and query operator stay paired in one place.
 
@@ -102,8 +105,8 @@ Architectural and design choices made while building the RAG assessment app, wit
 
 **API:**
 
-- `GET /chats/{id}/usage` → thread totals
-- `GET /usage/summary` → chats / suggestions / embeddings buckets
+- `GET /api/v1/chats/{id}/usage` → thread totals
+- `GET /api/v1/usage` → chats / suggestions / embeddings buckets
 
 **UI:**
 
@@ -125,7 +128,7 @@ service layout), not feature folders:
 app/
   main.py
   models.py          # starter DeclarativeBase; RAG ORM is in rag_core
-  api/               # routers: chat, upload, home
+  api/               # routers: chats, documents, usage, home
   schemas/           # Pydantic request/response
   services/          # thin HTTP-facing helpers over rag_core
 ```
@@ -134,16 +137,58 @@ app/
 
 ---
 
+## API versioning & resources
+
+**Decision:** All application HTTP routes (except root health) live under
+**`/api/v1`** with **plural** resource names. One cutover — no dual-route aliases.
+
+| Resource | Examples |
+|----------|----------|
+| Chats | `POST/GET /api/v1/chats`, `GET …/suggestions`, `…/{id}/messages`, `…/{id}/usage` |
+| Documents | `POST/GET /api/v1/documents`, `DELETE /api/v1/documents/{id}` |
+| Usage | `GET /api/v1/usage` |
+| Meta | `GET /` and `GET /api/v1/health`, `GET /api/v1/assignment` |
+
+**Reasoning:** Stable prefix for future `v2`; REST collection naming matches how
+the upload page talks about “documents” and the sidebar about “chats”.
+
+---
+
+## Document management
+
+**Decision:** Documents are a first-class collection on the backend:
+
+- `POST /api/v1/documents` — PDF ingest (NDJSON progress; renamed from `/upload`)
+- `GET /api/v1/documents` — list newest-first (`status`, `size_kb`, `chunk_count`,
+  `uploaded_at`, `error_message`)
+- `DELETE /api/v1/documents/{id}` — `204` / `404`; **must** remove embeddings
+
+**Decision:** Chunk rows cascade via DB `ON DELETE CASCADE` on
+`document_chunks.document_id` (already in `0001`; ORM matches). Deleting a
+document never leaves orphan vectors that retrieval could still cite.
+
+**Decision:** `documents.size_bytes` and `documents.error_message` added in
+`0003_document_metadata` so list/upload UX can show size and failure reasons.
+
+**Decision:** Upload page loads the list on mount and calls DELETE (with confirm)
+instead of client-only dummy state.
+
+**Scoped out:** `GET /documents/{id}`, re-ingest / reprocess.
+
+---
+
 ## Frontend
 
 **Decision:** Next.js **Pages Router** only. Pages:
 
-- `/` — custom chat (streams `/chat`, topic chips + footer usage)
-- `/upload` — dedicated PDF upload with per-file status (Requirement 2)
-- `/usage` — token/cost summary
+- `/` — custom chat (streams `POST /api/v1/chats`, topic chips + footer usage)
+- `/upload` — PDF upload with list/status/delete against `/api/v1/documents`
+- `/usage` — token/cost summary (`GET /api/v1/usage`)
 - `/assignment` — assignment brief
 
-**Decision:** Backend/API base URL from `frontend/src/config/`, not hardcoded in components.
+**Decision:** Backend base URL and versioned API root from
+`frontend/src/config/client.ts` (`backendUrl`, `apiV1Url`) — not hardcoded in
+components.
 
 **Decision:** Source citations / structured fields come from APIs as designed; do not scrape citations out of prose when structured fields exist.
 
@@ -159,7 +204,7 @@ app/
 
 **Reasoning:** Actions would force an extra click to load past chats and hide threads from the built-in left nav. The data layer keeps UX closer to the Next.js sidebar.
 
-**Decision:** Accept Chainlit’s requirement that `/project/threads` returns **401 without a logged-in user**. Next.js needs no auth because it uses our own `GET /chats` APIs. Chainlit’s sidebar is framework-gated on auth — that is why Chainlit has a login path and the Next.js app does not.
+**Decision:** Accept Chainlit’s requirement that `/project/threads` returns **401 without a logged-in user**. Next.js needs no auth because it uses our own `GET /api/v1/chats` APIs. Chainlit’s sidebar is framework-gated on auth — that is why Chainlit has a login path and the Next.js app does not.
 
 **Decision (auth workaround):** Demo-only silent login so users are not stuck on a login form:
 
