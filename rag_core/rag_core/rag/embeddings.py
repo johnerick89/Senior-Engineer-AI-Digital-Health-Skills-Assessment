@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from rag_core.core.config import get_settings
 from rag_core.core.embedding_defaults import EMBEDDING_DIMENSION, EMBEDDING_MODEL
 from rag_core.core.openai_client import create_embeddings
-from rag_core.services.usage_service import (
+from rag_core.core.token_usage import (
     TokenUsage,
     estimate_embed_tokens_from_texts,
     usage_from_openai_response,

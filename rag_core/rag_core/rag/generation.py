@@ -15,7 +15,7 @@ from rag_core.rag.reranking import rerank_chunks
 from rag_core.rag.retrieval import retrieve_chunks_async
 from rag_core.rag.schemas import ChatQuery, ChatTurn, RetrievedChunk
 from rag_core.services.document_service import list_ready_document_filenames
-from rag_core.services.usage_service import TokenUsage, usage_from_openai_response
+from rag_core.core.token_usage import TokenUsage, usage_from_openai_response
 
 logger = get_logger(__name__)
 

@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 
 from rag_core.core.config import get_settings
 from rag_core.core.logging import get_logger
+from rag_core.core.token_usage import TokenUsage
 from rag_core.db.session import get_session
 from rag_core.models.document import Document, DocumentStatus
 from rag_core.models.document_chunk import DocumentChunk
 from rag_core.rag.embeddings import EMBEDDING_MODEL, embed_texts_with_usage
 from rag_core.rag.schemas import RetrievedChunk
-from rag_core.services.usage_service import TokenUsage
 
 logger = get_logger(__name__)
 

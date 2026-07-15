@@ -1,5 +1,8 @@
 """ORM models package."""
 
+# Import leaf models cautiously: keep this package init free of heavy side effects.
+# Submodules can still be imported directly (e.g. rag_core.models.usage_event).
+
 from rag_core.models.base import BaseModel
 from rag_core.models.chat_message import ChatMessage
 from rag_core.models.chat_thread import ChatThread

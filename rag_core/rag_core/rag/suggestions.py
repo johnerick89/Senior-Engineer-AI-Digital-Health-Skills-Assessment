@@ -9,16 +9,14 @@ from typing import Any
 from rag_core.core.config import get_settings
 from rag_core.core.logging import get_logger
 from rag_core.core.openai_client import create_chat_completion
+from rag_core.core.token_usage import usage_from_openai_response
 from rag_core.db.session import get_session
 from rag_core.models.usage_event import UsageKind
 from rag_core.services.document_service import (
     DocumentSnippet,
     sample_ready_document_snippets,
 )
-from rag_core.services.usage_service import (
-    record_usage_event,
-    usage_from_openai_response,
-)
+from rag_core.services.usage_service import record_usage_event
 
 logger = get_logger(__name__)
 

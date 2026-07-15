@@ -21,10 +21,8 @@ from rag_core.services.document_service import (
     insert_chunks,
     update_document_status,
 )
-from rag_core.services.usage_service import (
-    apportion_integers,
-    record_usage_event,
-)
+from rag_core.core.token_usage import apportion_integers
+from rag_core.services.usage_service import record_usage_event
 
 logger = get_logger(__name__)
 
