@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import cast
 
+from rag_core.core.cache import normalize_query, query_embedding_cache
 from rag_core.core.config import get_settings
 from rag_core.core.embedding_defaults import EMBEDDING_DIMENSION, EMBEDDING_MODEL
 from rag_core.core.openai_client import create_embeddings
@@ -42,19 +44,32 @@ async def _embed_texts_async(texts: list[str]) -> EmbeddingResult:
         )
 
     batch_size = min(get_settings().ingestion_batch_size, _MAX_EMBED_BATCH_SIZE)
-    embeddings: list[list[float]] = []
-    prompt_tokens = 0
+    embeddings: list[list[float]] = [None] * len(texts)  # type: ignore[assignment]
+    missed_texts: list[str] = []
+    miss_positions: dict[str, list[int]] = {}
 
-    for start in range(0, len(texts), batch_size):
-        batch = texts[start : start + batch_size]
-        response = await create_embeddings(model=EMBEDDING_MODEL, input=batch)
+    for index, text in enumerate(texts):
+        key = normalize_query(text)
+        cached = query_embedding_cache.get(key)
+        if cached is not None:
+            embeddings[index] = cached
+            continue
+
+        if key not in miss_positions:
+            missed_texts.append(text)
+            miss_positions[key] = []
+        miss_positions[key].append(index)
+
+    prompt_tokens = 0
+    if missed_texts:
+        response = await create_embeddings(model=EMBEDDING_MODEL, input=missed_texts)
         batch_usage = usage_from_openai_response(
             response,
             model=EMBEDDING_MODEL,
             is_embedding=True,
         )
         if batch_usage.prompt_tokens <= 0:
-            prompt_tokens += estimate_embed_tokens_from_texts(batch)
+            prompt_tokens += estimate_embed_tokens_from_texts(missed_texts)
         else:
             prompt_tokens += batch_usage.prompt_tokens
 
@@ -65,10 +80,15 @@ async def _embed_texts_async(texts: list[str]) -> EmbeddingResult:
                 raise ValueError(
                     f"Expected embedding dimension {EMBEDDING_DIMENSION}, got {len(vector)}"
                 )
-            embeddings.append(vector)
+            normalized_key = normalize_query(missed_texts[item.index])
+            query_embedding_cache.set(normalized_key, vector)
+            for position in miss_positions[normalized_key]:
+                embeddings[position] = vector
+
+    result_embeddings = [cast(list[float], e) for e in embeddings]
 
     return EmbeddingResult(
-        embeddings=embeddings,
+        embeddings=result_embeddings,
         usage=TokenUsage(
             prompt_tokens=prompt_tokens,
             completion_tokens=0,

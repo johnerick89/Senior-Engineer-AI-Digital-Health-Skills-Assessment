@@ -181,12 +181,12 @@ app/
 **Decision:** All application HTTP routes (except root health) live under
 **`/api/v1`** with **plural** resource names. One cutover — no dual-route aliases.
 
-| Resource | Examples |
-|----------|----------|
-| Chats | `POST/GET /api/v1/chats`, `GET …/suggestions`, `…/{id}/messages`, `…/{id}/usage` |
-| Documents | `POST/GET /api/v1/documents`, `DELETE /api/v1/documents/{id}` |
-| Usage | `GET /api/v1/usage` |
-| Meta | `GET /` and `GET /api/v1/health`, `GET /api/v1/assignment` |
+| Resource  | Examples                                                                         |
+| --------- | -------------------------------------------------------------------------------- |
+| Chats     | `POST/GET /api/v1/chats`, `GET …/suggestions`, `…/{id}/messages`, `…/{id}/usage` |
+| Documents | `POST/GET /api/v1/documents`, `DELETE /api/v1/documents/{id}`                    |
+| Usage     | `GET /api/v1/usage`                                                              |
+| Meta      | `GET /` and `GET /api/v1/health`, `GET /api/v1/assignment`                       |
 
 **Reasoning:** Stable prefix for future `v2`; REST collection naming matches how
 the upload page talks about “documents” and the sidebar about “chats”.
@@ -236,6 +236,21 @@ components.
 ## Chainlit surface
 
 **Decision:** Chainlit calls `rag_core` **in-process** (same as planned for both consumers). It does **not** call the FastAPI backend over HTTP. `DATABASE_URL` is wired into the Chainlit service so `rag_core` can open Postgres from that process; the connection/session objects still live inside `rag_core`.
+
+## Logging & observability
+
+**Built now:**
+
+- Structured JSON request/response logs in the backend middleware and chat endpoint, including trace id, path, latency, status, thread id, retrieval counts, tokens, and cost.
+- Retrieval-quality logs emitted by the shared RAG generation path, including the selected chunk count and per-chunk similarity scores.
+- Ingestion outcome logs for each PDF upload, including chunk count and failure reason so the upload UI and operators see the same signal.
+
+**Production follow-up (documented, not built here):**
+
+- OpenTelemetry spans across backend → `rag_core` → Postgres/OpenAI calls. This is a valid production concern, but adds instrumentation and deployment overhead beyond the time budget of this pass.
+- Centralized log aggregation and alerting on error rates or cost anomalies. These are deployment and operations concerns, not local application-code work.
+
+**Reasoning:** The current pass focuses on low-effort instrumentation that is immediately useful for debugging retrieval quality and validating chat/ingest behavior in development. The more distributed and operational concerns are left for a later production rollout.
 
 **Decision:** Chat parity with Next.js for this surface means: streaming RAG answers (`stream_rag_answer`), starter topics (`suggest_chat_topics`), and a left-hand thread history backed by the same `chat_threads` / `chat_messages` rows.
 

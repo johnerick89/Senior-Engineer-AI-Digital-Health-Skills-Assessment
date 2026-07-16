@@ -10,6 +10,7 @@ from typing import Sequence
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from rag_core.core.cache import retrieval_result_cache
 from rag_core.models.document import Document, DocumentStatus
 from rag_core.models.document_chunk import DocumentChunk
 from rag_core.rag.embeddings import EMBEDDING_DIMENSION
@@ -109,6 +110,7 @@ def update_document_status(
     document.status = status
     if status == DocumentStatus.READY.value:
         document.error_message = None
+        retrieval_result_cache.clear()
     elif error_message is not None:
         document.error_message = error_message
     db.flush()
@@ -150,6 +152,7 @@ def delete_document(db: Session, document_id: uuid.UUID) -> bool:
     if document is None:
         return False
     db.delete(document)
+    retrieval_result_cache.clear()
     db.flush()
     return True
 

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from collections.abc import AsyncIterator
+from decimal import Decimal
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+
+from app.core.logging import get_logger, log_event
 
 from app.schemas.chat import (
     ChatMessageOut,
@@ -26,6 +30,7 @@ from rag_core.services import chat_service
 from rag_core.services.usage_service import summarize_thread_usage
 
 router = APIRouter(prefix="/chats", tags=["chats"])
+logger = get_logger(__name__)
 
 CHAT_ID_HEADER = "X-Chat-Id"
 CHAT_TITLE_HEADER = "X-Chat-Title"
@@ -59,29 +64,71 @@ async def list_chats() -> list[ChatThreadSummary]:
 
 
 @router.post("")
-async def create_chat(request: ChatRequest):
+async def create_chat(request: Request, chat_request: ChatRequest):
     """Stream a RAG answer and persist the turn on a chat thread."""
     try:
-        thread_id, title = await asyncio.to_thread(ensure_thread, request)
+        thread_id, title = await asyncio.to_thread(ensure_thread, chat_request)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail="Chat thread not found") from exc
 
     query = ChatQuery(
-        input=request.input,
+        input=chat_request.input,
         history=[
             RagChatTurn(input=turn.input, response=turn.response)
-            for turn in request.history
+            for turn in chat_request.history
         ],
     )
     capture = RagStreamCapture()
 
     async def generate() -> AsyncIterator[str]:
         parts: list[str] = []
+        start = time.perf_counter()
         try:
             async for chunk in stream_rag_answer(query, capture=capture):
                 parts.append(chunk)
                 yield chunk
+        except Exception as exc:  # noqa: BLE001
+            log_event(
+                logger,
+                "chat.request.failed",
+                event="chat.request.failed",
+                thread_id=str(thread_id),
+                error=str(exc),
+            )
+            raise
         finally:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            embed_usage = capture.query_embed_usage
+            completion_usage = capture.completion_usage
+            embed_cost = embed_usage.estimated_cost_usd if embed_usage else Decimal("0")
+            completion_cost = (
+                completion_usage.estimated_cost_usd if completion_usage else Decimal("0")
+            )
+            total_cost = embed_cost + completion_cost
+            log_event(
+                logger,
+                "chat.request.completed",
+                event="chat.request.completed",
+                thread_id=str(thread_id),
+                thread_title=title,
+                retrieval_chunk_count=len(capture.retrieved_chunks or []),
+                selected_chunk_count=len(capture.selected_chunks or []),
+                prompt_tokens=(
+                    (embed_usage.prompt_tokens if embed_usage else 0)
+                    + (completion_usage.prompt_tokens if completion_usage else 0)
+                ),
+                completion_tokens=(
+                    (embed_usage.completion_tokens if embed_usage else 0)
+                    + (completion_usage.completion_tokens if completion_usage else 0)
+                ),
+                total_tokens=(
+                    (embed_usage.total_tokens if embed_usage else 0)
+                    + (completion_usage.total_tokens if completion_usage else 0)
+                ),
+                estimated_cost_usd=total_cost,
+                latency_ms=duration_ms,
+                response_length=len("".join(parts)),
+            )
             await asyncio.to_thread(
                 persist_turn_usage,
                 thread_id,

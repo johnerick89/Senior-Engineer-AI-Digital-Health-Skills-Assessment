@@ -8,6 +8,12 @@ from app.api.documents import router as documents_router
 from app.api.home import api_router as home_api_router
 from app.api.home import root_router as home_root_router
 from app.api.usage import router as usage_router
+from app.core.logging import configure_logging, get_logger
+from app.middlewares.request_logging import RequestLoggingMiddleware
+
+
+configure_logging()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -27,6 +33,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -44,3 +51,5 @@ api_v1.include_router(usage_router)
 
 app.include_router(home_root_router)
 app.include_router(api_v1)
+
+logger.info("backend.started")

@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import logging
 import math
 import uuid
 
 from fastapi import HTTPException, UploadFile
 
+from app.core.logging import get_logger, log_event
 from app.schemas.documents import DocumentOut, UploadFileResult
 from rag_core.db.session import get_session
 from rag_core.rag.ingestion import ingest_pdf
 from rag_core.services import document_service
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20MB, matches frontend copy
 
@@ -68,6 +68,15 @@ def ingest_one(filename: str, data: bytes) -> UploadFileResult:
     """Sync helper for asyncio.to_thread."""
     try:
         result = ingest_pdf(data, filename=filename)
+        log_event(
+            logger,
+            "documents.ingest.completed",
+            event="documents.ingest.completed",
+            filename=filename,
+            document_id=str(result.document_id),
+            status="ready",
+            chunk_count=result.chunk_count,
+        )
         return UploadFileResult(
             filename=filename,
             document_id=str(result.document_id),
@@ -76,7 +85,11 @@ def ingest_one(filename: str, data: bytes) -> UploadFileResult:
             error=None,
         )
     except Exception as exc:  # noqa: BLE001 — surface to UI, keep batch going
-        logger.exception("ingest_failed filename=%s", filename)
+        logger.exception(
+            "documents.ingest.failed",
+            filename=filename,
+            error=str(exc),
+        )
         return UploadFileResult(
             filename=filename,
             document_id=None,

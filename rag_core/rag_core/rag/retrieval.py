@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
+from rag_core.core.cache import retrieval_result_cache
 from rag_core.core.config import get_settings
 from rag_core.core.logging import get_logger
 from rag_core.core.token_usage import TokenUsage
@@ -52,6 +53,77 @@ def _retrieve_with_session(
     return chunks
 
 
+def _rehydrate_cached_chunks(
+    db: Session,
+    query_embedding: list[float],
+    chunk_keys: list[tuple[str, int]],
+) -> list[RetrievedChunk] | None:
+    if not chunk_keys:
+        return []
+
+    stmt = (
+        select(DocumentChunk, Document.filename)
+        .join(Document, DocumentChunk.document_id == Document.id)
+        .where(Document.status == DocumentStatus.READY.value)
+        .where(tuple_(DocumentChunk.document_id, DocumentChunk.chunk_index).in_(chunk_keys))
+    )
+    rows = db.execute(stmt).all()
+    if len(rows) != len(chunk_keys):
+        return None
+
+    chunk_map: dict[tuple[str, int], tuple[DocumentChunk, str]] = {}
+    for chunk, filename in rows:
+        chunk_map[(chunk.document_id, chunk.chunk_index)] = (chunk, filename)
+
+    chunks: list[RetrievedChunk] = []
+    for document_id, chunk_index in chunk_keys:
+        row = chunk_map.get((document_id, chunk_index))
+        if row is None:
+            return None
+        chunk, filename = row
+        if chunk.embedding is None:
+            return None
+        score = max(0.0, 1.0 - float(chunk.embedding.cosine_distance(query_embedding)))
+        embedding = list(chunk.embedding)
+        chunks.append(
+            RetrievedChunk(
+                content=chunk.content,
+                document_id=chunk.document_id,
+                filename=filename,
+                chunk_index=chunk.chunk_index,
+                page_number=chunk.page_number,
+                score=score,
+                embedding=embedding,
+            )
+        )
+    return chunks
+
+
+def _retrieve_with_cache(
+    db: Session,
+    query_embedding: list[float],
+    k: int,
+) -> list[RetrievedChunk]:
+    cached_keys = retrieval_result_cache.get(query_embedding, k)
+    if cached_keys is not None:
+        chunks = _rehydrate_cached_chunks(db, query_embedding, cached_keys)
+        if chunks is not None:
+            logger.info(
+                "retrieve_cache_hit",
+                model=EMBEDDING_MODEL,
+                k=k,
+                hits=len(chunks),
+            )
+            return chunks
+        logger.info("retrieve_cache_stale", model=EMBEDDING_MODEL, k=k)
+
+    chunks = _retrieve_with_session(db, query_embedding, k)
+    if chunks:
+        cache_keys = [(chunk.document_id, chunk.chunk_index) for chunk in chunks]
+        retrieval_result_cache.set(query_embedding, k, cache_keys)
+    return chunks
+
+
 def retrieve_chunks(
     query: str,
     *,
@@ -77,7 +149,7 @@ def retrieve_chunks(
         embed_usage = result.usage
 
     with get_session() as db:
-        chunks = _retrieve_with_session(db, query_embedding, top_k)
+        chunks = _retrieve_with_cache(db, query_embedding, top_k)
 
     logger.info(
         "retrieve_complete",

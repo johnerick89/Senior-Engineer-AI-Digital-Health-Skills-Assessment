@@ -53,6 +53,8 @@ class RagStreamCapture:
 
     query_embed_usage: TokenUsage | None = None
     completion_usage: TokenUsage | None = None
+    retrieved_chunks: list[RetrievedChunk] | None = None
+    selected_chunks: list[RetrievedChunk] | None = None
     used_llm: bool = False
 
 
@@ -158,10 +160,12 @@ async def stream_rag_answer(
     sink = capture or RagStreamCapture()
     chunks, query_embedding, embed_usage = await retrieve_chunks_async(query.input)
     sink.query_embed_usage = embed_usage
+    sink.retrieved_chunks = chunks
 
     selected = (
         rerank_chunks(query_embedding, chunks) if chunks and query_embedding else []
     )
+    sink.selected_chunks = selected
 
     if not selected:
         titles = await asyncio.to_thread(list_available_documents, 10)
@@ -183,6 +187,19 @@ async def stream_rag_answer(
         "rag_generation_start",
         context_chunks=len(selected),
         history_turns=len(query.history),
+    )
+    logger.info(
+        "rag.retrieval.completed",
+        retrieved_chunk_count=len(chunks),
+        selected_chunk_count=len(selected),
+        chunks=[
+            {
+                "filename": chunk.filename,
+                "chunk_index": chunk.chunk_index,
+                "score": round(float(chunk.score), 6),
+            }
+            for chunk in selected
+        ],
     )
     async for token in stream_chat_tokens(messages, capture=sink):
         yield token
