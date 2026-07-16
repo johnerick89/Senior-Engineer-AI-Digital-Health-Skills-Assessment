@@ -15,6 +15,52 @@ def test_sqlalchemy_url_uses_psycopg_dialect() -> None:
     )
 
 
+def test_sqlalchemy_url_variants() -> None:
+    assert sqlalchemy_url("postgresql+psycopg://x").startswith("postgresql+psycopg://")
+    assert sqlalchemy_url("postgresql+asyncpg://host/db") == "postgresql+psycopg://host/db"
+    assert sqlalchemy_url("postgres://host/db") == "postgresql+psycopg://host/db"
+    assert sqlalchemy_url("sqlite:///tmp.db") == "sqlite:///tmp.db"
+
+
+@patch("rag_core.db.migrate.command.stamp")
+@patch("rag_core.db.migrate.create_engine")
+def test_stamp_if_legacy_schema_present(
+    mock_create_engine: MagicMock,
+    mock_stamp: MagicMock,
+) -> None:
+    from rag_core.db.migrate import _stamp_if_legacy_schema_present, get_alembic_config
+
+    conn = MagicMock()
+    conn.execute.return_value.scalar.side_effect = [True, False]
+    engine = MagicMock()
+    engine.connect.return_value.__enter__.return_value = conn
+    engine.connect.return_value.__exit__.return_value = None
+    mock_create_engine.return_value = engine
+
+    cfg = get_alembic_config("postgresql://example/db")
+    _stamp_if_legacy_schema_present(cfg)
+    mock_stamp.assert_called_once()
+
+
+@patch("rag_core.db.migrate.command.stamp")
+@patch("rag_core.db.migrate.create_engine")
+def test_stamp_skipped_when_alembic_version_exists(
+    mock_create_engine: MagicMock,
+    mock_stamp: MagicMock,
+) -> None:
+    from rag_core.db.migrate import _stamp_if_legacy_schema_present, get_alembic_config
+
+    conn = MagicMock()
+    conn.execute.return_value.scalar.side_effect = [True, True]
+    engine = MagicMock()
+    engine.connect.return_value.__enter__.return_value = conn
+    engine.connect.return_value.__exit__.return_value = None
+    mock_create_engine.return_value = engine
+
+    _stamp_if_legacy_schema_present(get_alembic_config("postgresql://example/db"))
+    mock_stamp.assert_not_called()
+
+
 def test_models_registered_on_metadata() -> None:
     # Import side effect via models package
     import rag_core.models  # noqa: F401

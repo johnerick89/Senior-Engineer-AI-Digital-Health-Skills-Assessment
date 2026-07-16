@@ -12,6 +12,12 @@ const config = {
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
   },
+  collectCoverageFrom: [
+    "src/components/UploadPanel.tsx",
+    "src/components/UsagePanel.tsx",
+    "src/config/client.ts",
+  ],
+  coverageReporters: ["text", "text-summary"],
 };
 
 export default createJestConfig(config);

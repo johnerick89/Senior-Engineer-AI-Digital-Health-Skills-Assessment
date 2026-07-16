@@ -108,3 +108,49 @@ async def test_suggest_chat_topics_empty_without_docs() -> None:
         cm.__exit__.return_value = None
         mock_session.return_value = cm
         assert await suggest_chat_topics() == []
+
+
+@pytest.mark.asyncio
+async def test_suggest_chat_topics_cap_zero() -> None:
+    assert await suggest_chat_topics(limit=0) == []
+
+
+@pytest.mark.asyncio
+async def test_suggest_chat_topics_falls_back_on_llm_error() -> None:
+    snippet = DocumentSnippet(
+        filename="guide.pdf",
+        content="Community health workers support immunization outreach.",
+        page_number=1,
+    )
+    with (
+        patch("rag_core.rag.suggestions.get_session") as mock_session,
+        patch(
+            "rag_core.rag.suggestions.sample_ready_document_snippets",
+            return_value=[snippet],
+        ),
+        patch(
+            "rag_core.rag.suggestions.create_chat_completion",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("llm down"),
+        ),
+    ):
+        cm = MagicMock()
+        cm.__enter__.return_value = MagicMock()
+        cm.__exit__.return_value = None
+        mock_session.return_value = cm
+        topics = await suggest_chat_topics(limit=3)
+    assert len(topics) >= 1
+
+
+def test_format_snippet_block_includes_page() -> None:
+    from rag_core.rag.suggestions import _format_snippet_block
+
+    block = _format_snippet_block(
+        [
+            DocumentSnippet(filename="a.pdf", content="hello", page_number=3),
+            DocumentSnippet(filename="b.pdf", content="world", page_number=None),
+        ]
+    )
+    assert "page 3" in block
+    assert "a.pdf" in block
+    assert "b.pdf" in block

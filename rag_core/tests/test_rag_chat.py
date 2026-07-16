@@ -104,6 +104,86 @@ def test_retrieve_chunks_embeds_and_queries(
     mock_embed.assert_called_once_with(["malaria protocol"])
 
 
+def test_retrieve_chunks_blank_and_zero_k() -> None:
+    assert retrieve_chunks("   ") == ([], [], None)
+    assert retrieve_chunks("hello", k=0) == ([], [], None)
+
+
+@patch("rag_core.rag.retrieval.get_session")
+@patch("rag_core.rag.retrieval.embed_texts_with_usage")
+def test_retrieve_chunks_empty_embeddings(
+    mock_embed: MagicMock,
+    mock_get_session: MagicMock,
+) -> None:
+    from rag_core.rag.embeddings import EmbeddingResult
+    from rag_core.services.usage_service import TokenUsage
+
+    mock_embed.return_value = EmbeddingResult(
+        embeddings=[],
+        usage=TokenUsage(prompt_tokens=0, model="text-embedding-3-small", is_embedding=True),
+    )
+    assert retrieve_chunks("q", k=3) == ([], [], None)
+    mock_get_session.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_retrieve_chunks_async_blank_and_zero_k() -> None:
+    from rag_core.rag.retrieval import retrieve_chunks_async
+
+    assert await retrieve_chunks_async("  ") == ([], [], None)
+    with patch("rag_core.rag.retrieval.get_settings") as mock_settings:
+        mock_settings.return_value = MagicMock(retrieval_k=0)
+        assert await retrieve_chunks_async("q") == ([], [], None)
+
+
+@pytest.mark.asyncio
+async def test_retrieve_chunks_async_happy_path() -> None:
+    from rag_core.rag.embeddings import EmbeddingResult
+    from rag_core.rag.retrieval import retrieve_chunks_async
+    from rag_core.services.usage_service import TokenUsage
+
+    usage = TokenUsage(prompt_tokens=2, model="text-embedding-3-small", is_embedding=True)
+    with (
+        patch(
+            "rag_core.rag.embeddings.embed_texts_with_usage_async",
+            new_callable=AsyncMock,
+            return_value=EmbeddingResult(embeddings=[[0.1, 0.2]], usage=usage),
+        ),
+        patch(
+            "rag_core.rag.retrieval.retrieve_chunks",
+            return_value=([], [0.1, 0.2], None),
+        ) as mock_sync,
+        patch("rag_core.rag.retrieval.get_settings") as mock_settings,
+    ):
+        mock_settings.return_value = MagicMock(retrieval_k=5)
+        chunks, embedding, out_usage = await retrieve_chunks_async("hello", k=5)
+    assert chunks == []
+    assert embedding == [0.1, 0.2]
+    assert out_usage is usage
+    mock_sync.assert_called_once()
+
+
+def test_rerank_empty_or_score_only() -> None:
+    assert rerank_chunks([1.0], [], top_n=2) == []
+    assert rerank_chunks([1.0], [_chunk(score=0.9)], top_n=0) == []
+    # No embedding vectors → score-only path
+    selected = rerank_chunks(
+        [],
+        [_chunk(score=0.9, embedding=[]), _chunk(score=0.8, embedding=[])],
+        top_n=1,
+        threshold=0.1,
+    )
+    assert len(selected) == 1
+    assert selected[0].score == 0.9
+
+
+def test_cosine_similarity_edge_cases() -> None:
+    from rag_core.rag.reranking import _cosine_similarity
+
+    assert _cosine_similarity([], [1.0]) == 0.0
+    assert _cosine_similarity([0.0, 0.0], [1.0, 0.0]) == 0.0
+
+
 def test_rerank_drops_below_threshold() -> None:
     low = _chunk(score=SIMILARITY_THRESHOLD - 0.05, content="irrelevant")
     assert rerank_chunks([1.0, 0.0, 0.0], [low]) == []

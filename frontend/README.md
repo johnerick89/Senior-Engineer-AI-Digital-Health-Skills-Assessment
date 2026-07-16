@@ -15,11 +15,9 @@ npm install
 
 Env (optional; Compose sets this for you):
 
-
 | Variable                  | Default                 | Notes                                         |
 | ------------------------- | ----------------------- | --------------------------------------------- |
 | `NEXT_PUBLIC_BACKEND_URL` | `http://localhost:6100` | Backend origin; `/api/v1` is appended in code |
-
 
 ---
 
@@ -73,6 +71,13 @@ cd frontend
 npm test
 ```
 
+- Tests with coverage
+
+```bash
+cd frontend
+npm run test:coverage
+```
+
 Jest + Testing Library: `clientConfig`, UploadPanel (list/delete), UsagePanel.
 
 ---
@@ -89,4 +94,3 @@ frontend/
   __tests__/       # under src/**/__tests__
   Dockerfile
 ```
-

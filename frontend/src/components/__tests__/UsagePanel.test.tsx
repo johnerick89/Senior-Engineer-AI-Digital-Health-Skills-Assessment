@@ -41,4 +41,30 @@ describe("UsagePanel", () => {
     expect(await screen.findByText(/38 tokens/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(`${clientConfig.apiV1Url}/usage`);
   });
+
+  it("shows an error when the usage request is not ok", async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({}),
+    } as Response) as unknown as typeof fetch;
+
+    render(<UsagePanel />);
+
+    expect(
+      await screen.findByText("Could not load usage summary."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an error when fetch throws", async () => {
+    globalThis.fetch = jest
+      .fn()
+      .mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
+
+    render(<UsagePanel />);
+
+    expect(
+      await screen.findByText("Could not load usage summary."),
+    ).toBeInTheDocument();
+  });
 });

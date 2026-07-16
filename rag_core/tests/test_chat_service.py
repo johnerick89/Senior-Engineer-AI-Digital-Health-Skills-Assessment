@@ -5,13 +5,21 @@ from __future__ import annotations
 import uuid
 from unittest.mock import MagicMock
 
+import pytest
+
 from rag_core.models.chat_message import ChatMessage
 from rag_core.models.chat_thread import ChatThread
 from rag_core.services.chat_service import (
     add_message,
+    count_user_messages,
     create_thread,
     derive_thread_title,
+    get_latest_user_message,
+    get_thread,
+    list_messages,
+    list_threads,
     title_from_input,
+    update_thread_title,
 )
 
 
@@ -66,3 +74,49 @@ def test_add_message_adds_orm_row() -> None:
     assert message.content == "hi"
     assert message.thread_id == thread_id
     db.add.assert_called_once_with(message)
+
+
+def test_title_from_input_blank_is_new_chat() -> None:
+    assert title_from_input("   ") == "New chat"
+
+
+def test_get_thread_and_update_title() -> None:
+    db = MagicMock()
+    thread_id = uuid.uuid4()
+    thread = ChatThread(title="Hi")
+    thread.id = thread_id
+    db.get.return_value = thread
+    assert get_thread(db, thread_id) is thread
+    updated = update_thread_title(db, thread, "Substantive title")
+    assert updated.title == "Substantive title"
+    db.flush.assert_called()
+
+
+def test_count_user_messages() -> None:
+    db = MagicMock()
+    db.scalars.return_value.all.return_value = [1, 2, 3]
+    assert count_user_messages(db, uuid.uuid4()) == 3
+
+
+def test_add_message_rejects_bad_role_and_blank() -> None:
+    with pytest.raises(ValueError, match="role"):
+        add_message(MagicMock(), uuid.uuid4(), role="system", content="x")
+    with pytest.raises(ValueError, match="blank"):
+        add_message(MagicMock(), uuid.uuid4(), role="user", content="  ")
+
+
+def test_list_threads_and_messages_and_latest_user() -> None:
+    thread = ChatThread(title="t")
+    msg = ChatMessage(thread_id=uuid.uuid4(), role="user", content="hi")
+
+    db_threads = MagicMock()
+    db_threads.scalars.return_value.all.return_value = [thread]
+    assert list_threads(db_threads, limit=10) == [thread]
+
+    db_messages = MagicMock()
+    db_messages.scalars.return_value.all.return_value = [msg]
+    assert list_messages(db_messages, uuid.uuid4()) == [msg]
+
+    db_latest = MagicMock()
+    db_latest.scalars.return_value.first.return_value = msg
+    assert get_latest_user_message(db_latest, uuid.uuid4()) is msg

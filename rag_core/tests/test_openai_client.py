@@ -143,3 +143,55 @@ async def test_create_chat_completion_uses_openrouter_only_when_openai_unset() -
         model="openai/gpt-4o-mini",
         messages=[{"role": "user", "content": "Hello!"}],
     )
+
+
+@pytest.mark.asyncio
+async def test_create_embeddings_raises_when_no_keys() -> None:
+    settings = MagicMock(openai_api_key="", openrouter_api_key="")
+    with (
+        patch.object(openai_client, "get_settings", return_value=settings),
+        pytest.raises(RuntimeError, match="No LLM provider"),
+    ):
+        await create_embeddings(model="text-embedding-3-small", input=["hi"])
+
+
+@pytest.mark.asyncio
+async def test_create_chat_falls_back_on_api_error() -> None:
+    openai_client_mock = MagicMock()
+    openai_client_mock.chat.completions.create = AsyncMock(
+        side_effect=APIError("quota", request=None, body=None)
+    )
+    openrouter_client_mock = MagicMock()
+    expected = MagicMock(name="chat_response")
+    openrouter_client_mock.chat.completions.create = AsyncMock(return_value=expected)
+    settings = MagicMock(openai_api_key="sk-openai", openrouter_api_key="sk-or")
+
+    with (
+        patch.object(openai_client, "get_settings", return_value=settings),
+        patch.object(openai_client, "get_async_client", return_value=openai_client_mock),
+        patch.object(
+            openai_client,
+            "get_openrouter_async_client",
+            return_value=openrouter_client_mock,
+        ),
+    ):
+        result = await create_chat_completion(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": "Hello!"}],
+        )
+    assert result is expected
+
+
+def test_get_openrouter_client_requires_key() -> None:
+    from rag_core.core.openai_client import get_openrouter_async_client, reset_async_client
+
+    reset_async_client()
+    with (
+        patch.object(
+            openai_client,
+            "get_settings",
+            return_value=MagicMock(openrouter_api_key=""),
+        ),
+        pytest.raises(RuntimeError, match="OpenRouter is not configured"),
+    ):
+        get_openrouter_async_client()

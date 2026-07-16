@@ -167,3 +167,83 @@ def test_list_documents_maps_rows() -> None:
     assert items[0].chunk_count == 47
     assert items[0].size_bytes == 2380 * 1024
     assert items[0].uploaded_at == uploaded_at
+
+
+def test_get_document_returns_row() -> None:
+    from rag_core.services.document_service import get_document
+
+    db = MagicMock()
+    document_id = uuid.uuid4()
+    document = Document(filename="x.pdf", status=DocumentStatus.READY.value)
+    document.id = document_id
+    db.get.return_value = document
+    assert get_document(db, document_id) is document
+
+
+def test_count_chunks_for_document() -> None:
+    from rag_core.services.document_service import count_chunks_for_document
+
+    db = MagicMock()
+    db.scalar.return_value = 5
+    assert count_chunks_for_document(db, uuid.uuid4()) == 5
+    db.scalar.return_value = None
+    assert count_chunks_for_document(db, uuid.uuid4()) == 0
+
+
+def test_list_ready_document_filenames_empty_limit() -> None:
+    from rag_core.services.document_service import list_ready_document_filenames
+
+    assert list_ready_document_filenames(MagicMock(), limit=0) == []
+
+
+def test_list_ready_document_filenames() -> None:
+    from rag_core.services.document_service import list_ready_document_filenames
+
+    db = MagicMock()
+    db.scalars.return_value.all.return_value = ["a.pdf", "b.pdf"]
+    assert list_ready_document_filenames(db, limit=10) == ["a.pdf", "b.pdf"]
+
+
+def test_sample_ready_document_snippets_empty_limit() -> None:
+    from rag_core.services.document_service import sample_ready_document_snippets
+
+    assert sample_ready_document_snippets(MagicMock(), limit=0) == []
+
+
+def test_sample_ready_document_snippets_truncates_and_skips() -> None:
+    from rag_core.services.document_service import sample_ready_document_snippets
+
+    db = MagicMock()
+    doc_ok = Document(filename="ok.pdf", status=DocumentStatus.READY.value)
+    doc_ok.id = uuid.uuid4()
+    doc_empty = Document(filename="empty.pdf", status=DocumentStatus.READY.value)
+    doc_empty.id = uuid.uuid4()
+    doc_none = Document(filename="none.pdf", status=DocumentStatus.READY.value)
+    doc_none.id = uuid.uuid4()
+
+    chunk_long = MagicMock()
+    chunk_long.content = "word " * 200
+    chunk_long.page_number = 2
+    chunk_blank = MagicMock()
+    chunk_blank.content = "   \n\t  "
+
+    docs_result = MagicMock()
+    docs_result.all.return_value = [doc_ok, doc_empty, doc_none]
+    long_result = MagicMock()
+    long_result.first.return_value = chunk_long
+    blank_result = MagicMock()
+    blank_result.first.return_value = chunk_blank
+    none_result = MagicMock()
+    none_result.first.return_value = None
+    db.scalars.side_effect = [docs_result, long_result, blank_result, none_result]
+
+    snippets = sample_ready_document_snippets(db, limit=8, max_chars=40)
+    assert len(snippets) == 1
+    assert snippets[0].filename == "ok.pdf"
+    assert snippets[0].content.endswith("…")
+    assert len(snippets[0].content) <= 40
+    assert snippets[0].page_number == 2
+
+
+def test_insert_chunks_empty_returns_zero() -> None:
+    assert insert_chunks(MagicMock(), uuid.uuid4(), []) == 0

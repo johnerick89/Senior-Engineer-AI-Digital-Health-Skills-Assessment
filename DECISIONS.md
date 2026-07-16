@@ -103,6 +103,45 @@ migrations over ad-hoc `init.sql` only.
 
 **Decision:** Central recording helpers in `rag_core/services/usage_service.py` (+ pure helpers in `token_usage.py`).
 
+### Cost-estimation layer (operational visibility)
+
+**What it does:** Records **per-step USD/token usage** across:
+
+- Query embeddings (user messages)
+- Chat completions (assistant messages)
+- Ingest embeddings (document chunks; apportioned across batches)
+- Suggested topics (`usage_events.kind=suggestion`)
+
+This is exposed through:
+
+- Data: `chat_messages.*`, `document_chunks.*`, and the `usage_events` ledger
+- API: `GET /api/v1/chats/{id}/usage`, `GET /api/v1/usage`
+- UI: chat footer totals + `/usage` page rollups
+
+**Why it exists:** The assignment didn’t require cost tracking, but any
+production LLM system needs **operational visibility** into spend and token
+drivers (embeddings vs completion vs background UX calls) to set budgets, debug
+spikes, and make trade-offs.
+
+**Trade-off:** Rates are hardcoded list-price estimates in
+`rag_core/core/token_pricing.py` (good for visibility, not billing-accurate).
+A production system would add a **scheduled job** to refresh pricing against
+provider updates (and/or ingest provider-reported costs), rather than manually
+editing a table. This “pricing refresh” scheduler is documented but not built.
+
+### Suggested topics (UX service layer)
+
+**Decision:** LLM-generated starter questions on empty chats via
+`rag_core/rag/suggestions.py` (`suggest_chat_topics`), recorded as a usage event
+(`usage_events.kind=suggestion`).
+
+**Why it exists:** Improves first-turn UX (especially in demos) by showing
+document-grounded prompts when users don’t know what to ask.
+
+**Trade-off:** It’s an extra LLM call per “new chat” experience. Spend is bounded
+by capping the list to **5** topics, and by falling back to heuristic topics
+when the LLM call fails.
+
 **API:**
 
 - `GET /api/v1/chats/{id}/usage` → thread totals
