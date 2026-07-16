@@ -6,9 +6,10 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 
+from app.core.rate_limiter import limiter
 from app.schemas.documents import DocumentOut
 from app.services.documents import (
     delete_document,
@@ -21,10 +22,13 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @router.post("")
+@limiter.limit("10/minute")
 async def create_documents(
+    request: Request,
     files: list[UploadFile] | None = File(default=None),
 ) -> StreamingResponse:
     """Validate PDFs, then stream NDJSON results as each file finishes ingest."""
+    del request
     prepared = await read_and_validate(files or [])
 
     async def generate() -> AsyncIterator[str]:

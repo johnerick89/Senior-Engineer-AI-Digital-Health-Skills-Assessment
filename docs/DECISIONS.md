@@ -237,21 +237,6 @@ components.
 
 **Decision:** Chainlit calls `rag_core` **in-process** (same as planned for both consumers). It does **not** call the FastAPI backend over HTTP. `DATABASE_URL` is wired into the Chainlit service so `rag_core` can open Postgres from that process; the connection/session objects still live inside `rag_core`.
 
-## Logging & observability
-
-**Built now:**
-
-- Structured JSON request/response logs in the backend middleware and chat endpoint, including trace id, path, latency, status, thread id, retrieval counts, tokens, and cost.
-- Retrieval-quality logs emitted by the shared RAG generation path, including the selected chunk count and per-chunk similarity scores.
-- Ingestion outcome logs for each PDF upload, including chunk count and failure reason so the upload UI and operators see the same signal.
-
-**Production follow-up (documented, not built here):**
-
-- OpenTelemetry spans across backend → `rag_core` → Postgres/OpenAI calls. This is a valid production concern, but adds instrumentation and deployment overhead beyond the time budget of this pass.
-- Centralized log aggregation and alerting on error rates or cost anomalies. These are deployment and operations concerns, not local application-code work.
-
-**Reasoning:** The current pass focuses on low-effort instrumentation that is immediately useful for debugging retrieval quality and validating chat/ingest behavior in development. The more distributed and operational concerns are left for a later production rollout.
-
 **Decision:** Chat parity with Next.js for this surface means: streaming RAG answers (`stream_rag_answer`), starter topics (`suggest_chat_topics`), and a left-hand thread history backed by the same `chat_threads` / `chat_messages` rows.
 
 **Decision:** Use Chainlit’s **native history sidebar** via a custom `BaseDataLayer` (`chainlit_app/app/data_layer.py`) mapped onto `chat_service`, rather than an in-chat Action-button thread picker.
@@ -275,3 +260,87 @@ A server **startup script cannot** log visitors in: auth cookies live in the bro
 **Decision:** PDF upload and the Usage page stay on Next.js only. Chainlit spontaneous file upload is disabled. No token/cost footer in Chainlit v1.
 
 ---
+
+## Security & abuse prevention
+
+**Decision:** Authentication/authorization is out of scope: no JWT-based auth, no user accounts, and no per-user document/chat isolation. The system uses a shared anonymous access model.
+
+**Decision:** Backend CORS is restricted to explicit known origins (frontend `:3000`, Chainlit `:8000`) rather than a wildcard `*`.
+
+**Decision:** Backend input validation and safety checks are enforced server-side:
+
+- Pydantic schemas validate all request bodies.
+- PDF upload validation is enforced in the backend (PDF-only and size-limited) rather than relying on frontend-only checks.
+
+**Decision:** Backend exceptions are translated to structured HTTP responses; stack traces / raw SQL errors are not returned to clients.
+
+**Decision:** Add in-memory per-IP rate limiting via `slowapi` to protect expensive endpoints (single-instance assessment scope; no Redis-backed shared limiter):
+
+- Chat generation: `POST /api/v1/chats` limited to `20/minute`.
+- PDF ingestion: `POST /api/v1/documents` (upload) limited to `10/minute`.
+
+**Implementation detail:** Rate limiting uses `get_remote_address` (client IP) as the key function, and relies on slowapi’s default `429 Too Many Requests` response with a `Retry-After` header. SlowAPI requires the handler to accept a `Request` parameter for IP resolution; the documents upload route includes it.
+
+## Caching
+
+**Decision:** In-memory process-local caches in `rag_core` for query embeddings and short-TTL retrieval results. Redis (or similar) would be the natural upgrade for multi-instance deployment.
+
+**Reasoning:** Assessment scope runs single-process Docker Compose services with no cross-instance invalidation complexity. A shared external cache would be required for consistent hits across horizontally scaled replicas.
+
+**Limitation:** `backend` and `chainlit_app` are separate processes in Compose. Each gets its own in-memory cache. That is acceptable for this scale.
+
+**Decision:** All cache logic lives in `rag_core/core/cache.py` and is consulted from `embeddings.py` and `retrieval.py`. Neither `backend/` nor `chainlit_app/` reimplements caching.
+
+| Opportunity               | Action            | Rationale                                                                                           |
+| ------------------------- | ----------------- | --------------------------------------------------------------------------------------------------- |
+| Query embedding cache     | **Built**         | Same normalized question → skip duplicate OpenAI embed calls                                        |
+| Retrieval result cache    | **Built**         | Short TTL on `(embedding_hash, k)` → chunk ids; helps repeated questions and suggested-topic clicks |
+| Ingest embedding cache    | **Document only** | Content-hash skip is useful in production; low value when re-uploads are rare during grading        |
+| Generation response cache | **Document only** | Semantic answer cache needs careful invalidation; stale answers can cite deleted documents          |
+
+**Query embedding cache (built):**
+
+- Hook: `_embed_texts_async` in `rag_core/rag/embeddings.py`
+- Key: `normalize_query(text)` — lowercase, collapsed whitespace; exact match only (no fuzzy dedup)
+- Value: `list[float]` vector; LRU-capped at 512 entries per process
+- No TTL (vectors are deterministic for the pinned model)
+- Batch behavior: cache hits are merged with API calls for misses only; usage tokens recorded for misses only
+
+**Retrieval result cache (built):**
+
+- Hook: `_retrieve_with_cache` in `rag_core/rag/retrieval.py`
+- Key: `(sha256(embedding_bytes), k)` — reranking threshold is **not** in the key (applied after retrieval)
+- Value: ordered `(document_id, chunk_index)` tuples; full `RetrievedChunk` rows rehydrated from DB on hit
+- TTL: 5 minutes (`RETRIEVAL_CACHE_TTL_SECONDS = 300`)
+- Invalidation: clear retrieval cache on document delete and when status transitions to `ready` (corpus change). Query embedding cache is **not** cleared on corpus change.
+
+**Explicit non-goals:**
+
+- Redis or any external shared cache
+- Fuzzy / semantic near-duplicate query matching
+- Caching full LLM generation responses
+- Content-hash skip at ingest time
+- Cross-process cache sharing between `backend` and `chainlit_app`
+
+---
+
+## Logging & observability
+
+**Decision:** **structlog** for structured logging in both `rag_core` and `backend`. JSON renderer when `app_env=production`; human-readable console renderer in development.
+
+**Decision:** Backend request logging via `RequestLoggingMiddleware` assigns a per-request `trace_id` from `X-Trace-Id` / `X-Request-Id` headers (or a generated UUID) and binds it into structlog contextvars for downstream log lines.
+
+**Decision:** Backend chat completion logs use a `log_event` helper (`backend/app/core/logging.py`) that JSON-sanitizes `Decimal` and `UUID` values before emission.
+
+**Built now:**
+
+- Structured JSON request/response logs in the backend middleware and chat endpoint, including trace id, path, latency, status, thread id, retrieval counts, tokens, and cost.
+- Retrieval-quality logs emitted by the shared RAG generation path, including the selected chunk count and per-chunk similarity scores.
+- Ingestion outcome logs for each PDF upload, including chunk count and failure reason so the upload UI and operators see the same signal.
+
+**Production follow-up:**
+
+- OpenTelemetry spans across backend → `rag_core` → Postgres/OpenAI calls. This is a valid production concern, but adds instrumentation and deployment overhead beyond the time budget of this pass.
+- Centralized log aggregation and alerting on error rates or cost anomalies. These are deployment and operations concerns, not local application-code work.
+
+**Reasoning:** The current pass focuses on low-effort instrumentation that is immediately useful for debugging retrieval quality and validating chat/ingest behavior in development. The more distributed and operational concerns are left for a later production rollout.

@@ -18,5 +18,7 @@ def client(monkeypatch: pytest.MonkeyPatch):
     with patch("rag_core.rag.vector_store.initialize_vector_store"):
         from app.main import app
 
+        app.state.limiter.reset()
         with TestClient(app) as test_client:
             yield test_client
+        app.state.limiter.reset()

@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.core.logging import get_logger, log_event
+from app.core.rate_limiter import limiter
 
 from app.schemas.chat import (
     ChatMessageOut,
@@ -64,6 +65,7 @@ async def list_chats() -> list[ChatThreadSummary]:
 
 
 @router.post("")
+@limiter.limit("20/minute")
 async def create_chat(request: Request, chat_request: ChatRequest):
     """Stream a RAG answer and persist the turn on a chat thread."""
     try:

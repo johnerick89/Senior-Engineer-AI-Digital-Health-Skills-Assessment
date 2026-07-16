@@ -136,6 +136,86 @@ def test_retrieve_chunks_reuses_retrieval_cache() -> None:
         mock_rehydrate.assert_called_once()
 
 
+def test_embed_cache_hit_reports_zero_usage() -> None:
+    query_embedding_cache.clear()
+    expected_vector = [0.5] * EMBEDDING_DIMENSION
+
+    response = MagicMock()
+    response.data = [MagicMock(index=0, embedding=expected_vector)]
+    response.usage = MagicMock(prompt_tokens=5, total_tokens=5, completion_tokens=0)
+
+    with patch("rag_core.rag.embeddings.create_embeddings", new_callable=AsyncMock) as mock_create:
+        mock_create.return_value = response
+        from rag_core.rag.embeddings import embed_texts_with_usage
+
+        first = embed_texts_with_usage(["cached query"])
+        second = embed_texts_with_usage(["cached query"])
+
+    assert first.usage.prompt_tokens == 5
+    assert second.usage.prompt_tokens == 0
+    assert mock_create.await_count == 1
+
+
+def test_query_embedding_cache_evicts_oldest_entry_at_capacity() -> None:
+    cache = QueryEmbeddingCache(max_entries=2)
+    vector_a = [1.0] * EMBEDDING_DIMENSION
+    vector_b = [2.0] * EMBEDDING_DIMENSION
+    vector_c = [3.0] * EMBEDDING_DIMENSION
+
+    cache.set("first", vector_a)
+    cache.set("second", vector_b)
+    cache.set("third", vector_c)
+
+    assert cache.get("first") is None
+    assert cache.get("second") == vector_b
+    assert cache.get("third") == vector_c
+
+
+def test_retrieve_chunks_falls_back_when_cached_chunks_are_stale() -> None:
+    from rag_core.rag.retrieval import retrieve_chunks
+
+    query_embedding_cache.clear()
+    retrieval_result_cache.clear()
+
+    query_embedding = [0.1] * EMBEDDING_DIMENSION
+    fresh_chunk = RetrievedChunk(
+        content="fresh chunk",
+        document_id=uuid.uuid4(),
+        filename="doc.pdf",
+        chunk_index=0,
+        page_number=1,
+        score=0.9,
+        embedding=query_embedding,
+    )
+
+    response = EmbeddingResult(
+        embeddings=[query_embedding],
+        usage=TokenUsage(prompt_tokens=1, model="text-embedding-3-small", is_embedding=True),
+    )
+
+    with patch("rag_core.rag.retrieval.embed_texts_with_usage", return_value=response), patch(
+        "rag_core.rag.retrieval._retrieve_with_session",
+        return_value=[fresh_chunk],
+    ) as mock_retrieve, patch(
+        "rag_core.rag.retrieval._rehydrate_cached_chunks",
+        side_effect=[None, [fresh_chunk]],
+    ) as mock_rehydrate, patch("rag_core.rag.retrieval.get_session") as mock_get_session:
+        db = MagicMock()
+        cm = MagicMock(__enter__=MagicMock(return_value=db), __exit__=MagicMock(return_value=None))
+        mock_get_session.return_value = cm
+
+        first_chunks, _, _ = retrieve_chunks("hello", k=2)
+        assert first_chunks == [fresh_chunk]
+        mock_retrieve.assert_called_once()
+        mock_rehydrate.assert_not_called()
+
+        mock_retrieve.reset_mock()
+        second_chunks, _, _ = retrieve_chunks("hello", k=2)
+        assert second_chunks == [fresh_chunk]
+        mock_retrieve.assert_called_once()
+        mock_rehydrate.assert_called_once()
+
+
 def test_document_service_clears_retrieval_cache_on_ready_state() -> None:
     from rag_core.services.document_service import update_document_status
 

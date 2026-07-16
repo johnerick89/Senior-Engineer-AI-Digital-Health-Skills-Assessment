@@ -5,11 +5,15 @@ FastAPI backend, Chainlit second chat surface, shared `rag_core` package, and
 PostgreSQL + pgvector.
 
 > **Assignment brief:** The original skills-assessment instructions live in
-> [`ASSIGNMENT.md`](./ASSIGNMENT.md) (also rendered in the app at
+> [`docs/ASSIGNMENT.md`](./docs/ASSIGNMENT.md) (also rendered in the app at
 > `/assignment`). This README is the **application** runbook — not the brief.
 
-Architecture choices and deferred scope: [`DECISIONS.md`](./DECISIONS.md),
-[`ASSUMPTIONS.md`](./ASSUMPTIONS.md).
+Architecture choices and deferred scope:
+[`docs/DECISIONS.md`](./docs/DECISIONS.md),
+[`docs/ASSUMPTIONS.md`](./docs/ASSUMPTIONS.md).
+
+Production rollout plan:
+[`docs/PRODUCTION_DEPLOYMENT_PLAN.md`](./docs/PRODUCTION_DEPLOYMENT_PLAN.md).
 
 Per-service detail (API paths, tests, coverage, layout):
 
