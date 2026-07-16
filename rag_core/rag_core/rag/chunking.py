@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from rag_core.rag.pdf import PageText
 
 # Match litigation-prep-assistant defaults (character-based, overlapping).
-CHUNK_SIZE = 800
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = 1200
+CHUNK_OVERLAP = 150
 
 
 @dataclass(frozen=True)

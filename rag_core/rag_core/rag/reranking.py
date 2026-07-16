@@ -10,7 +10,7 @@ from rag_core.rag.schemas import RetrievedChunk
 logger = get_logger(__name__)
 
 SIMILARITY_THRESHOLD = 0.25
-RERANK_TOP_N = 4
+RERANK_TOP_N = 5
 MMR_LAMBDA = 0.7
 
 

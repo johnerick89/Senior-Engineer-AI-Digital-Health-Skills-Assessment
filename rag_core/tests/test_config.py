@@ -13,7 +13,7 @@ def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.database_url.startswith("postgresql://")
     assert "asyncpg" not in settings.database_url
     assert settings.generation_model == "gpt-4o-mini"
-    assert settings.retrieval_k == 10
+    assert settings.retrieval_k == 20
     assert settings.ingestion_batch_size == 100
     assert settings.agent_step_timeout_seconds == 120
     assert settings.app_env == "development"

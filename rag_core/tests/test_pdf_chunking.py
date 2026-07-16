@@ -50,8 +50,8 @@ def test_chunk_pages_preserves_page_numbers_and_global_index() -> None:
 
 
 def test_chunk_constants_match_reference_defaults() -> None:
-    assert CHUNK_SIZE == 800
-    assert CHUNK_OVERLAP == 100
+    assert CHUNK_SIZE == 1200
+    assert CHUNK_OVERLAP == 150
 
 
 def test_extract_pdf_pages_rejects_empty() -> None:

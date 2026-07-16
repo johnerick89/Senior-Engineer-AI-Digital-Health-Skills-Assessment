@@ -58,7 +58,7 @@ class Settings(BaseSettings):
 
     # Retrieval / ingestion tuning.
     retrieval_k: int = Field(
-        default=10,
+        default=20,
         validation_alias=AliasChoices("RAG_CORE_RETRIEVAL_K", "retrieval_k"),
         description="Number of chunks to retrieve per query.",
     )

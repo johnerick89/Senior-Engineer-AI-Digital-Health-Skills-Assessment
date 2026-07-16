@@ -4,7 +4,7 @@ Shared RAG library used in-process by `backend/` and `chainlit_app/`: PDF ingest
 embeddings, pgvector storage, retrieval, reranking, generation, and usage helpers.
 No FastAPI or Chainlit imports.
 
-Root [`README.md`](../README.md) covers the full app; this file is package-specific.
+Root `[README.md](../README.md)` covers the full app; this file is package-specific.
 
 ## Layout
 
@@ -29,14 +29,16 @@ pip install -r rag_core/requirements.txt   # pytest + pytest-cov
 cp rag_core/.env.example rag_core/.env
 ```
 
-| Variable | Required | Notes |
-|----------|----------|-------|
-| `DATABASE_URL` | Yes | Host: `localhost:5432`; Compose overrides to `relational_db:5432` |
-| `OPENAI_API_KEY` | Primary | Embeddings + chat |
-| `OPENROUTER_API_KEY` | Fallback | When OpenAI fails/unset |
-| `RAG_CORE_GENERATION_MODEL` | No | Default `gpt-4o-mini` |
-| `RAG_CORE_RETRIEVAL_K` | No | Default `10` |
-| `RAG_CORE_INGESTION_BATCH_SIZE` | No | Default `100` |
+
+| Variable                        | Required | Notes                                                             |
+| ------------------------------- | -------- | ----------------------------------------------------------------- |
+| `DATABASE_URL`                  | Yes      | Host: `localhost:5432`; Compose overrides to `relational_db:5432` |
+| `OPENAI_API_KEY`                | Primary  | Embeddings + chat                                                 |
+| `OPENROUTER_API_KEY`            | Fallback | When OpenAI fails/unset                                           |
+| `RAG_CORE_GENERATION_MODEL`     | No       | Default `gpt-4o-mini`                                             |
+| `RAG_CORE_RETRIEVAL_K`          | No       | Default `20`                                                      |
+| `RAG_CORE_INGESTION_BATCH_SIZE` | No       | Default `100`                                                     |
+
 
 Embedding model/dimension and chunk size/overlap are pinned in code (not env).
 
